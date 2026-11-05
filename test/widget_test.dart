@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lexiread/core/constants/app_strings.dart';
 import 'package:lexiread/features/ocr/data/ocr_service.dart';
 import 'package:lexiread/features/reader/domain/models/reading_document.dart';
+import 'package:lexiread/features/reader/domain/services/tts_service.dart';
 import 'package:lexiread/features/reader/presentation/screens/reader_screen.dart';
 import 'package:lexiread/features/settings/domain/reader_settings.dart';
 import 'package:lexiread/features/settings/presentation/controllers/settings_controller.dart';
@@ -11,6 +13,14 @@ import 'package:lexiread/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('flutter_tts'), (call) async {
+      return 1;
+    });
+  });
   test('OcrService.cleanOcrText membersihkan whitespace berlebih & menyambung kata terpotong', () {
     final ocrService = OcrService();
     const rawOcr = '  Ini    adalah contoh   teks   \r\n'
@@ -52,6 +62,26 @@ void main() {
     expect(restored.showReadingRuler, isFalse);
   });
 
+  test('TtsService kontrol navigasi dan kecepatan baca', () async {
+    final ttsService = TtsService();
+    await ttsService.initialize();
+
+    await ttsService.setSpeechRate(0.65);
+    expect(ttsService.speechRate, 0.65);
+
+    expect(ttsService.playbackState, TtsPlaybackState.stopped);
+    await ttsService.speak('Tes pembacaan audio');
+    expect(ttsService.playbackState, TtsPlaybackState.playing);
+
+    await ttsService.pause();
+    expect(ttsService.playbackState, TtsPlaybackState.paused);
+
+    await ttsService.stop();
+    expect(ttsService.playbackState, TtsPlaybackState.stopped);
+
+    ttsService.dispose();
+  });
+
   testWidgets('LexiRead smoke test - verify action cards render',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -74,7 +104,7 @@ void main() {
     expect(find.text(AppStrings.actionPasteTitle), findsOneWidget);
   });
 
-  testWidgets('ReaderScreen renders extracted text and settings sheet opens',
+  testWidgets('ReaderScreen renders text, audio navigation controls (Play, Pause, Stop), and settings sheet',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -108,8 +138,13 @@ void main() {
     expect(find.textContaining('Paragraf pertama'), findsOneWidget);
     expect(find.textContaining('Paragraf kedua'), findsOneWidget);
 
+    // Verifikasi tombol navigasi audio Play, Pause, dan Stop tersedia
+    expect(find.text('Bacakan'), findsOneWidget);
+    expect(find.byTooltip('Jeda Suara'), findsOneWidget);
+    expect(find.byTooltip('Berhenti & Hapus Sorotan'), findsOneWidget);
+
     // Buka bottom sheet format teks
-    await tester.tap(find.text('Format Teks'));
+    await tester.tap(find.byTooltip('Format Teks & Font'));
     await tester.pumpAndSettle();
 
     expect(find.text('Pengaturan Baca'), findsOneWidget);

@@ -43,6 +43,11 @@ class AppColors {
   static const Color progressFill = Color(0xFF2E7D5B);
   static const Color progressComplete = Color(0xFF1F6B48);
 
+  // Penyorotan Kata Real-Time (Read-Along TTS)
+  static const Color highlightWord = Color(0xFFFFF3A8); // Kuning pastel lembut ramah disleksia
+  static const Color highlightWordBorder = Color(0xFFF2DE78);
+  static const Color highlightWordText = Color(0xFF1B1F24);
+
   // Status & Elemen UI
   static const Color border = Color(0xFFE2DDD5);
   static const Color borderStrong = Color(0xFFC5BDB2);

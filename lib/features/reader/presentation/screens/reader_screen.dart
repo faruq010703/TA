@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/theme/text_styles.dart';
+import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
 import '../../domain/models/reading_document.dart';
 import '../../domain/services/tts_service.dart';
@@ -11,9 +12,24 @@ import '../controllers/home_controller.dart';
 import '../widgets/reader_settings_sheet.dart';
 import '../widgets/reading_progress_bar.dart';
 
+/// Struktur blok paragraf untuk pemetaan penyorotan kata dan auto-scrolling
+class _ParagraphBlock {
+  final int index;
+  final String text;
+  final int globalCharStart;
+  final int globalCharEnd;
+
+  const _ParagraphBlock({
+    required this.index,
+    required this.text,
+    required this.globalCharStart,
+    required this.globalCharEnd,
+  });
+}
+
 /// Layar pembaca teks adaptif ramah disleksia dewasa:
 /// Menampilkan teks hasil ekstraksi OCR / berkas / manual dengan format yang dapat
-/// disesuaikan secara dinamis (Font, Ukuran, Spasi Baris, Jarak Huruf, Line-Shading, dan Tema Warna).
+/// disesuaikan secara dinamis dan fitur Read-Along TTS (penyorotan kata real-time & auto-scroll).
 class ReaderScreen extends ConsumerStatefulWidget {
   final ReadingDocument document;
 
@@ -30,10 +46,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   late ReadingDocument _currentDoc;
   late final ScrollController _scrollController;
   late final TtsService _ttsService;
+
   TtsPlaybackState _ttsState = TtsPlaybackState.stopped;
   StreamSubscription<TtsPlaybackState>? _ttsSubscription;
+  StreamSubscription<TtsWordHighlight>? _highlightSubscription;
+
+  TtsWordHighlight _currentHighlight = TtsWordHighlight.empty;
+  final Map<int, GlobalKey> _paragraphKeys = {};
+  List<_ParagraphBlock> _paragraphs = [];
+
   double _rulerOffsetY = 240.0;
   bool _isRulerEnabled = false;
+  int _lastAutoScrolledParagraph = -1;
 
   @override
   void initState() {
@@ -42,22 +66,79 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _scrollController = ScrollController();
     _ttsService = ref.read(ttsServiceProvider);
 
-    _initTtsListener();
+    _parseParagraphs();
+    _initTtsListeners();
   }
 
-  void _initTtsListener() {
+  void _parseParagraphs() {
+    _paragraphKeys.clear();
+    final blocks = <_ParagraphBlock>[];
+    final fullText = _currentDoc.content;
+    final lines = fullText.split('\n');
+
+    int currentOffset = 0;
+    int paragraphIdx = 0;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isNotEmpty) {
+        final startIndex = fullText.indexOf(trimmed, currentOffset);
+        final endIndex = startIndex >= 0 ? startIndex + trimmed.length : currentOffset + trimmed.length;
+
+        final actualStart = startIndex >= 0 ? startIndex : currentOffset;
+        final actualEnd = endIndex;
+
+        final block = _ParagraphBlock(
+          index: paragraphIdx,
+          text: trimmed,
+          globalCharStart: actualStart,
+          globalCharEnd: actualEnd,
+        );
+        blocks.add(block);
+        _paragraphKeys[paragraphIdx] = GlobalKey();
+        paragraphIdx++;
+        currentOffset = actualEnd;
+      } else {
+        currentOffset += line.length + 1;
+      }
+    }
+
+    _paragraphs = blocks;
+  }
+
+  void _initTtsListeners() {
+    // Sinkronkan kecepatan suara dari pengaturan pengguna
+    final settings = ref.read(settingsControllerProvider);
+    _ttsService.setSpeechRate(settings.speechRate);
+
     _ttsSubscription = _ttsService.stateStream.listen((state) {
       if (mounted) {
         setState(() {
           _ttsState = state;
+          if (state == TtsPlaybackState.stopped) {
+            _currentHighlight = TtsWordHighlight.empty;
+          }
         });
       }
     });
 
-    _scrollController.addListener(_onScroll);
+    // Penyorotan kata real-time & auto-scroll
+    _highlightSubscription = _ttsService.highlightStream.listen((highlight) {
+      if (mounted) {
+        setState(() {
+          _currentHighlight = highlight;
+        });
+
+        if (highlight.isActive) {
+          _checkAutoScroll(highlight);
+        }
+      }
+    });
+
+    _scrollController.addListener(_onManualScroll);
   }
 
-  void _onScroll() {
+  void _onManualScroll() {
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
@@ -77,20 +158,64 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  /// Memeriksa dan menjalankan auto-scroll jika posisi teks kata aktif berada di luar viewport
+  void _checkAutoScroll(TtsWordHighlight highlight) {
+    for (final block in _paragraphs) {
+      if (highlight.charStart >= block.globalCharStart &&
+          highlight.charStart < block.globalCharEnd) {
+        // Hanya scroll jika berpindah paragraf atau baru mulai
+        if (_lastAutoScrolledParagraph != block.index) {
+          _lastAutoScrolledParagraph = block.index;
+          final key = _paragraphKeys[block.index];
+          if (key?.currentContext != null) {
+            Scrollable.ensureVisible(
+              key!.currentContext!,
+              alignment: 0.32, // Posisikan di sepertiga atas layar agar mata nyaman
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeInOutCubic,
+            );
+          }
+        }
+        break;
+      }
+    }
+  }
+
   @override
   void dispose() {
     _ttsSubscription?.cancel();
+    _highlightSubscription?.cancel();
     _ttsService.stop();
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _toggleTts() async {
-    if (_ttsState == TtsPlaybackState.playing) {
-      await _ttsService.pause();
+  Future<void> _playTts() async {
+    final settings = ref.read(settingsControllerProvider);
+    await _ttsService.setSpeechRate(settings.speechRate);
+
+    if (_ttsState == TtsPlaybackState.paused && _currentHighlight.charStart > 0) {
+      // Lanjutkan dari posisi kata yang sedang terjeda
+      await _ttsService.speak(
+        _currentDoc.content,
+        fromCharIndex: _currentHighlight.charStart,
+      );
     } else {
+      // Mulai dari awal teks
       await _ttsService.speak(_currentDoc.content);
     }
+  }
+
+  Future<void> _pauseTts() async {
+    await _ttsService.pause();
+  }
+
+  Future<void> _stopTts() async {
+    await _ttsService.stop();
+    setState(() {
+      _currentHighlight = TtsWordHighlight.empty;
+      _lastAutoScrolledParagraph = -1;
+    });
   }
 
   void _openSettingsSheet() {
@@ -101,12 +226,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsControllerProvider);
     final theme = settings.colorTheme;
-
-    // Pisahkan teks menjadi paragraf untuk fitur Line-Shading
-    final paragraphs = _currentDoc.content
-        .split('\n')
-        .where((p) => p.trim().isNotEmpty)
-        .toList();
 
     return Scaffold(
       backgroundColor: theme.backgroundColor,
@@ -135,7 +254,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               _isRulerEnabled
                   ? Icons.view_headline_rounded
                   : Icons.view_headline_outlined,
-              color: _isRulerEnabled ? AppColors.primary : theme.textColor.withValues(alpha: 0.6),
+              color: _isRulerEnabled
+                  ? AppColors.primary
+                  : theme.textColor.withValues(alpha: 0.6),
             ),
             tooltip: _isRulerEnabled
                 ? 'Sembunyikan Penggaris Baca'
@@ -181,7 +302,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
       body: Stack(
         children: [
-          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF
+          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF DENGAN PENYOROTAN KATA REAL-TIME
           SingleChildScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
@@ -189,19 +310,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               left: AppDimens.space16,
               right: AppDimens.space16,
               top: AppDimens.space20,
-              bottom: 130.0,
+              bottom: 140.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Render teks paragraf per paragraf dengan fitur Line-Shading
-                ...paragraphs.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final text = entry.value;
-                  final isEven = index.isEven;
+                ..._paragraphs.map((block) {
+                  final isEven = block.index.isEven;
                   final isShaded = settings.enableLineShading && !isEven;
 
                   return Container(
+                    key: _paragraphKeys[block.index],
                     margin: const EdgeInsets.only(bottom: 12.0),
                     padding: EdgeInsets.symmetric(
                       horizontal: settings.enableLineShading ? 14.0 : 4.0,
@@ -217,16 +336,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             )
                           : null,
                     ),
-                    child: SelectableText(
-                      text,
-                      style: settings.fontFamily.getTextStyle(
-                        fontSize: settings.fontSize,
-                        height: settings.lineSpacing,
-                        letterSpacing: settings.letterSpacing,
-                        color: theme.textColor,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
+                    child: _buildParagraphText(block, settings, theme),
                   );
                 }),
               ],
@@ -244,7 +354,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 onVerticalDragUpdate: (details) {
                   setState(() {
                     _rulerOffsetY = (_rulerOffsetY + details.delta.dy)
-                        .clamp(60.0, MediaQuery.of(context).size.height - 180.0);
+                        .clamp(60.0, MediaQuery.of(context).size.height - 200.0);
                   });
                 },
                 child: Container(
@@ -298,10 +408,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ],
       ),
 
-      // BILAH KONTROL BAWAH (TTS & Panel Tampilan)
+      // BILAH NAVIGASI AUDIO BAWAH (Play, Pause, Stop, Kecepatan, Format Teks)
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.space20,
+          horizontal: AppDimens.space16,
           vertical: AppDimens.space12,
         ),
         decoration: BoxDecoration(
@@ -323,48 +433,177 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         child: SafeArea(
           child: Row(
             children: [
-              // Tombol Buka Panel Pengaturan
-              OutlinedButton.icon(
+              // 1. Tombol Buka Panel Format Teks
+              IconButton(
                 onPressed: _openSettingsSheet,
-                icon: const Icon(Icons.format_size_rounded, size: 20),
-                label: const Text('Format Teks'),
-                style: OutlinedButton.styleFrom(
+                icon: const Icon(Icons.format_size_rounded, size: 22),
+                tooltip: 'Format Teks & Font',
+                style: IconButton.styleFrom(
                   foregroundColor: theme.textColor,
-                  side: BorderSide(color: theme.borderColor),
+                  backgroundColor: theme.shadingColor,
+                  minimumSize: const Size(42, 42),
+                ),
+              ),
+              const SizedBox(width: AppDimens.space8),
+
+              // 2. Chip Pengaturan Kecepatan Suara Cepat (0.3x - 1.0x)
+              GestureDetector(
+                onTap: () {
+                  // Siklus cepat kecepatan baca: 0.4x -> 0.5x -> 0.7x -> 1.0x
+                  double nextRate = 0.5;
+                  if (settings.speechRate < 0.45) {
+                    nextRate = 0.5;
+                  } else if (settings.speechRate < 0.65) {
+                    nextRate = 0.7;
+                  } else if (settings.speechRate < 0.9) {
+                    nextRate = 1.0;
+                  } else {
+                    nextRate = 0.35;
+                  }
+                  ref
+                      .read(settingsControllerProvider.notifier)
+                      .updateSpeechRate(nextRate);
+                  _ttsService.setSpeechRate(nextRate);
+                },
+                child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.space16,
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.shadingColor,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                    border: Border.all(color: theme.borderColor),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.speed_rounded, size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${settings.speechRate.toStringAsFixed(2)}x',
+                        style: AppTextStyles.badge.copyWith(
+                          color: theme.textColor,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               const Spacer(),
 
-              // Tombol Utama Suara (Text-to-Speech)
+              // 3. Tombol STOP Navigasi Audio
+              IconButton(
+                onPressed: _ttsState != TtsPlaybackState.stopped ? _stopTts : null,
+                icon: const Icon(Icons.stop_rounded, size: 26),
+                tooltip: 'Berhenti & Hapus Sorotan',
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  disabledForegroundColor: theme.textColor.withValues(alpha: 0.3),
+                  backgroundColor: theme.shadingColor,
+                  minimumSize: const Size(44, 44),
+                ),
+              ),
+              const SizedBox(width: AppDimens.space8),
+
+              // 4. Tombol PAUSE Navigasi Audio
+              IconButton(
+                onPressed: _ttsState == TtsPlaybackState.playing ? _pauseTts : null,
+                icon: const Icon(Icons.pause_rounded, size: 26),
+                tooltip: 'Jeda Suara',
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  disabledForegroundColor: theme.textColor.withValues(alpha: 0.3),
+                  backgroundColor: theme.shadingColor,
+                  minimumSize: const Size(44, 44),
+                ),
+              ),
+              const SizedBox(width: AppDimens.space8),
+
+              // 5. Tombol PLAY Navigasi Audio
               ElevatedButton.icon(
-                onPressed: _toggleTts,
+                onPressed: _ttsState != TtsPlaybackState.playing ? _playTts : _pauseTts,
                 icon: Icon(
                   _ttsState == TtsPlaybackState.playing
                       ? Icons.pause_rounded
-                      : Icons.volume_up_rounded,
+                      : Icons.play_arrow_rounded,
                   size: 24,
                 ),
                 label: Text(
                   _ttsState == TtsPlaybackState.playing
-                      ? 'Jeda Suara'
-                      : 'Bacakan',
+                      ? 'Jeda'
+                      : (_ttsState == TtsPlaybackState.paused ? 'Lanjut' : 'Bacakan'),
                   style: AppTextStyles.button,
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(130.0, AppDimens.minTouchTarget),
+                  minimumSize: const Size(116.0, AppDimens.minTouchTarget),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.space20,
+                    horizontal: AppDimens.space16,
                   ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Membangun teks paragraf dengan penyorotan kata aktif real-time (Read-Along)
+  Widget _buildParagraphText(
+    _ParagraphBlock block,
+    ReaderSettings settings,
+    ReaderColorTheme theme,
+  ) {
+    final baseStyle = settings.fontFamily.getTextStyle(
+      fontSize: settings.fontSize,
+      height: settings.lineSpacing,
+      letterSpacing: settings.letterSpacing,
+      color: theme.textColor,
+      fontWeight: FontWeight.w400,
+    );
+
+    // Periksa apakah penyorotan kata aktif berada di dalam blok paragraf ini
+    final hasActiveHighlight = _currentHighlight.isActive &&
+        _currentHighlight.charStart >= block.globalCharStart &&
+        _currentHighlight.charStart < block.globalCharEnd;
+
+    if (!hasActiveHighlight) {
+      return SelectableText(
+        block.text,
+        style: baseStyle,
+      );
+    }
+
+    // Hitung offset relatif kata di dalam teks paragraf ini
+    final relStart = (_currentHighlight.charStart - block.globalCharStart)
+        .clamp(0, block.text.length);
+    final relEnd = (_currentHighlight.charEnd - block.globalCharStart)
+        .clamp(relStart, block.text.length);
+
+    final before = block.text.substring(0, relStart);
+    final activeWord = block.text.substring(relStart, relEnd);
+    final after = block.text.substring(relEnd);
+
+    return SelectableText.rich(
+      TextSpan(
+        style: baseStyle,
+        children: [
+          if (before.isNotEmpty) TextSpan(text: before),
+          if (activeWord.isNotEmpty)
+            TextSpan(
+              text: activeWord,
+              style: baseStyle.copyWith(
+                backgroundColor: AppColors.highlightWord, // Kuning pastel #FFF3A8
+                color: AppColors.highlightWordText,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          if (after.isNotEmpty) TextSpan(text: after),
+        ],
       ),
     );
   }

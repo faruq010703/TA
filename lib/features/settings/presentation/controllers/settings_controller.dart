@@ -51,7 +51,7 @@ class SettingsNotifier extends Notifier<ReaderSettings> {
   }
 
   Future<void> updateSpeechRate(double newRate) async {
-    state = state.copyWith(speechRate: newRate);
+    state = state.copyWith(speechRate: newRate.clamp(0.3, 1.0));
     await _save();
   }
 

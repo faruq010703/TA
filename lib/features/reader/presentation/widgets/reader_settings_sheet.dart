@@ -5,6 +5,7 @@ import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
+import '../controllers/home_controller.dart';
 
 /// Panel Pengaturan Tampilan Baca (Reader Settings Bottom Sheet)
 /// Memungkinkan pembaca disleksia dewasa menyesuaikan font, ukuran, spasi baris,
@@ -277,7 +278,24 @@ class ReaderSettingsSheet extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppDimens.space16),
 
-                  // 6. FITUR LINE-SHADING (Latar Selang-Seling)
+                  // 6. SLIDER KECEPATAN SUARA TTS (0.3x - 1.0x)
+                  _buildSliderControl(
+                    title: 'Kecepatan Baca Suara',
+                    valueDisplay: '${settings.speechRate.toStringAsFixed(2)}x',
+                    icon: Icons.speed_rounded,
+                    theme: theme,
+                    value: settings.speechRate,
+                    min: 0.3,
+                    max: 1.0,
+                    divisions: 14,
+                    onChanged: (val) {
+                      controller.updateSpeechRate(val);
+                      ref.read(ttsServiceProvider).setSpeechRate(val);
+                    },
+                  ),
+                  const SizedBox(height: AppDimens.space16),
+
+                  // 7. FITUR LINE-SHADING (Latar Selang-Seling)
                   Container(
                     decoration: BoxDecoration(
                       color: settings.enableLineShading
@@ -407,3 +425,4 @@ class ReaderSettingsSheet extends ConsumerWidget {
     );
   }
 }
+
