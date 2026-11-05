@@ -11,6 +11,8 @@ import '../../domain/services/tts_service.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/reader_settings_sheet.dart';
 import '../widgets/reading_progress_bar.dart';
+import '../widgets/summary_sheet.dart';
+import '../widgets/syllable_dialog.dart';
 
 /// Struktur blok paragraf untuk pemetaan penyorotan kata dan auto-scrolling
 class _ParagraphBlock {
@@ -29,7 +31,8 @@ class _ParagraphBlock {
 
 /// Layar pembaca teks adaptif ramah disleksia dewasa:
 /// Menampilkan teks hasil ekstraksi OCR / berkas / manual dengan format yang dapat
-/// disesuaikan secara dinamis dan fitur Read-Along TTS (penyorotan kata real-time & auto-scroll).
+/// disesuaikan secara dinamis, fitur Read-Along TTS (penyorotan kata real-time & auto-scroll),
+/// analisis pemenggal suku kata interaktif, dan peringkas teks mandiri TextRank.
 class ReaderScreen extends ConsumerStatefulWidget {
   final ReadingDocument document;
 
@@ -83,7 +86,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       final trimmed = line.trim();
       if (trimmed.isNotEmpty) {
         final startIndex = fullText.indexOf(trimmed, currentOffset);
-        final endIndex = startIndex >= 0 ? startIndex + trimmed.length : currentOffset + trimmed.length;
+        final endIndex = startIndex >= 0
+            ? startIndex + trimmed.length
+            : currentOffset + trimmed.length;
 
         final actualStart = startIndex >= 0 ? startIndex : currentOffset;
         final actualEnd = endIndex;
@@ -107,7 +112,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   void _initTtsListeners() {
-    // Sinkronkan kecepatan suara dari pengaturan pengguna
     final settings = ref.read(settingsControllerProvider);
     _ttsService.setSpeechRate(settings.speechRate);
 
@@ -122,7 +126,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       }
     });
 
-    // Penyorotan kata real-time & auto-scroll
     _highlightSubscription = _ttsService.highlightStream.listen((highlight) {
       if (mounted) {
         setState(() {
@@ -158,19 +161,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  /// Memeriksa dan menjalankan auto-scroll jika posisi teks kata aktif berada di luar viewport
   void _checkAutoScroll(TtsWordHighlight highlight) {
     for (final block in _paragraphs) {
       if (highlight.charStart >= block.globalCharStart &&
           highlight.charStart < block.globalCharEnd) {
-        // Hanya scroll jika berpindah paragraf atau baru mulai
         if (_lastAutoScrolledParagraph != block.index) {
           _lastAutoScrolledParagraph = block.index;
           final key = _paragraphKeys[block.index];
           if (key?.currentContext != null) {
             Scrollable.ensureVisible(
               key!.currentContext!,
-              alignment: 0.32, // Posisikan di sepertiga atas layar agar mata nyaman
+              alignment: 0.32,
               duration: const Duration(milliseconds: 320),
               curve: Curves.easeInOutCubic,
             );
@@ -195,13 +196,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     await _ttsService.setSpeechRate(settings.speechRate);
 
     if (_ttsState == TtsPlaybackState.paused && _currentHighlight.charStart > 0) {
-      // Lanjutkan dari posisi kata yang sedang terjeda
       await _ttsService.speak(
         _currentDoc.content,
         fromCharIndex: _currentHighlight.charStart,
       );
     } else {
-      // Mulai dari awal teks
       await _ttsService.speak(_currentDoc.content);
     }
   }
@@ -220,6 +219,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   void _openSettingsSheet() {
     ReaderSettingsSheet.show(context);
+  }
+
+  void _openSummarySheet() {
+    SummarySheet.show(
+      context,
+      fullText: _currentDoc.content,
+      ttsService: _ttsService,
+    );
   }
 
   @override
@@ -248,6 +255,32 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // Tombol Ringkas Dokumen (TextRank Ekstraktif Lokal)
+          TextButton.icon(
+            onPressed: _openSummarySheet,
+            icon: const Icon(
+              Icons.auto_awesome_rounded,
+              size: 17,
+              color: AppColors.actionUploadIcon,
+            ),
+            label: Text(
+              'Ringkas',
+              style: AppTextStyles.badge.copyWith(
+                fontSize: 12,
+                color: AppColors.actionUploadIcon,
+              ),
+            ),
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.actionUploadIconBg,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                side: const BorderSide(color: AppColors.actionUploadBorder),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6.0),
+
           // Toggle Penggaris Baca (Reading Ruler)
           IconButton(
             icon: Icon(
@@ -302,7 +335,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
       body: Stack(
         children: [
-          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF DENGAN PENYOROTAN KATA REAL-TIME
+          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF DENGAN INTERAKSI SUKU KATA & READ-ALONG
           SingleChildScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
@@ -449,7 +482,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               // 2. Chip Pengaturan Kecepatan Suara Cepat (0.3x - 1.0x)
               GestureDetector(
                 onTap: () {
-                  // Siklus cepat kecepatan baca: 0.4x -> 0.5x -> 0.7x -> 1.0x
                   double nextRate = 0.5;
                   if (settings.speechRate < 0.45) {
                     nextRate = 0.5;
@@ -500,7 +532,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 tooltip: 'Berhenti & Hapus Sorotan',
                 style: IconButton.styleFrom(
                   foregroundColor: AppColors.error,
-                  disabledForegroundColor: theme.textColor.withValues(alpha: 0.3),
+                  disabledForegroundColor:
+                      theme.textColor.withValues(alpha: 0.3),
                   backgroundColor: theme.shadingColor,
                   minimumSize: const Size(44, 44),
                 ),
@@ -514,7 +547,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 tooltip: 'Jeda Suara',
                 style: IconButton.styleFrom(
                   foregroundColor: AppColors.primary,
-                  disabledForegroundColor: theme.textColor.withValues(alpha: 0.3),
+                  disabledForegroundColor:
+                      theme.textColor.withValues(alpha: 0.3),
                   backgroundColor: theme.shadingColor,
                   minimumSize: const Size(44, 44),
                 ),
@@ -523,7 +557,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
               // 5. Tombol PLAY Navigasi Audio
               ElevatedButton.icon(
-                onPressed: _ttsState != TtsPlaybackState.playing ? _playTts : _pauseTts,
+                onPressed:
+                    _ttsState != TtsPlaybackState.playing ? _playTts : _pauseTts,
                 icon: Icon(
                   _ttsState == TtsPlaybackState.playing
                       ? Icons.pause_rounded
@@ -533,7 +568,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 label: Text(
                   _ttsState == TtsPlaybackState.playing
                       ? 'Jeda'
-                      : (_ttsState == TtsPlaybackState.paused ? 'Lanjut' : 'Bacakan'),
+                      : (_ttsState == TtsPlaybackState.paused
+                          ? 'Lanjut'
+                          : 'Bacakan'),
                   style: AppTextStyles.button,
                 ),
                 style: ElevatedButton.styleFrom(
@@ -552,7 +589,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  /// Membangun teks paragraf dengan penyorotan kata aktif real-time (Read-Along)
+  /// Membangun teks paragraf dengan kata-kata interaktif (ketuk untuk pemenggalan suku kata)
+  /// dan penyorotan kata aktif real-time (Read-Along TTS)
   Widget _buildParagraphText(
     _ParagraphBlock block,
     ReaderSettings settings,
@@ -566,45 +604,67 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       fontWeight: FontWeight.w400,
     );
 
-    // Periksa apakah penyorotan kata aktif berada di dalam blok paragraf ini
-    final hasActiveHighlight = _currentHighlight.isActive &&
-        _currentHighlight.charStart >= block.globalCharStart &&
-        _currentHighlight.charStart < block.globalCharEnd;
+    // Tokenisasi kata-kata dalam paragraf
+    final words = block.text.split(RegExp(r'\s+'));
 
-    if (!hasActiveHighlight) {
-      return SelectableText(
-        block.text,
-        style: baseStyle,
-      );
-    }
+    int runningCharOffset = block.globalCharStart;
 
-    // Hitung offset relatif kata di dalam teks paragraf ini
-    final relStart = (_currentHighlight.charStart - block.globalCharStart)
-        .clamp(0, block.text.length);
-    final relEnd = (_currentHighlight.charEnd - block.globalCharStart)
-        .clamp(relStart, block.text.length);
+    return Wrap(
+      spacing: 5.0,
+      runSpacing: 4.0,
+      children: words.map((rawWord) {
+        final cleanWord = rawWord.replaceAll(RegExp(r'[^\w]'), '');
+        final wordStart = block.text.indexOf(rawWord, runningCharOffset - block.globalCharStart) + block.globalCharStart;
+        final wordEnd = wordStart + rawWord.length;
+        runningCharOffset = wordEnd;
 
-    final before = block.text.substring(0, relStart);
-    final activeWord = block.text.substring(relStart, relEnd);
-    final after = block.text.substring(relEnd);
+        // Periksa apakah kata ini sedang dibacakan secara real-time
+        final isHighlighted = _currentHighlight.isActive &&
+            ((_currentHighlight.charStart >= wordStart &&
+                    _currentHighlight.charStart < wordEnd) ||
+                (_currentHighlight.word.toLowerCase() == cleanWord.toLowerCase() &&
+                    cleanWord.isNotEmpty &&
+                    _currentHighlight.charStart >= block.globalCharStart &&
+                    _currentHighlight.charStart < block.globalCharEnd));
 
-    return SelectableText.rich(
-      TextSpan(
-        style: baseStyle,
-        children: [
-          if (before.isNotEmpty) TextSpan(text: before),
-          if (activeWord.isNotEmpty)
-            TextSpan(
-              text: activeWord,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (cleanWord.isNotEmpty) {
+              SyllableDialog.show(
+                context,
+                word: cleanWord,
+                ttsService: _ttsService,
+              );
+            }
+          },
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isHighlighted ? 4.0 : 1.0,
+              vertical: isHighlighted ? 2.0 : 0.0,
+            ),
+            decoration: isHighlighted
+                ? BoxDecoration(
+                    color: AppColors.highlightWord, // Kuning pastel lembut #FFF3A8
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: AppColors.highlightWordBorder,
+                      width: 1.2,
+                    ),
+                  )
+                : null,
+            child: Text(
+              rawWord,
               style: baseStyle.copyWith(
-                backgroundColor: AppColors.highlightWord, // Kuning pastel #FFF3A8
-                color: AppColors.highlightWordText,
-                fontWeight: FontWeight.w700,
+                color: isHighlighted
+                    ? AppColors.highlightWordText
+                    : theme.textColor,
+                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w400,
               ),
             ),
-          if (after.isNotEmpty) TextSpan(text: after),
-        ],
-      ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
