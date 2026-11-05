@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 /// Palet warna yang dirancang khusus untuk kenyamanan membaca disleksia dewasa.
 /// Menghindari kontras hitam-putih murni yang menyilaukan (visual stress / scotopic sensitivity).
 class AppColors {
-  // Latar belakang utama: Off-white / krem lembut ramah mata
+  // Latar belakang utama: Off-white / krem lembut ramah mata (menghindari #FFFFFF murni)
   static const Color background = Color(0xFFFDFBF7);
-  static const Color surface = Color(0xFFFFFFFF);
+  static const Color surface = Color(0xFFFAF7F0);
   static const Color surfaceWarm = Color(0xFFF7F3EB);
   static const Color surfaceTinted = Color(0xFFF3EFE6);
 

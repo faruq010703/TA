@@ -145,7 +145,66 @@ class HomeNotifier extends Notifier<HomeState> {
     }
   }
 
-  /// 2. Aksi Unggah Berkas / Galeri (PDF atau Gambar)
+  /// Aksi Ambil Gambar dari Galeri Foto (dengan OCR Google ML Kit)
+  Future<ReadingDocument?> pickFromGallery() async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+      );
+
+      if (photo == null) return null;
+
+      state = state.copyWith(
+        isLoading: true,
+        loadingTitle: AppStrings.loadingOcrTitle,
+        loadingSubtitle: AppStrings.loadingOcrSubtitle,
+        clearError: true,
+      );
+
+      final ocrService = ref.read(ocrServiceProvider);
+      final ocrResult = await ocrService.processImageFromPath(photo.path);
+
+      state = state.copyWith(isLoading: false);
+
+      if (!ocrResult.isSuccess || ocrResult.text.isEmpty) {
+        state = state.copyWith(
+          errorMessage: ocrResult.errorMessage ?? AppStrings.errorNoTextFound,
+        );
+        return null;
+      }
+
+      final now = DateTime.now();
+      final snippet = AccessibilityUtils.createSnippet(ocrResult.text);
+      final title = 'Foto Galeri ${AccessibilityUtils.formatFriendlyDate(now)}';
+      final totalWords = AccessibilityUtils.countWords(ocrResult.text);
+
+      final newDoc = ReadingDocument(
+        id: 'doc_${now.millisecondsSinceEpoch}',
+        title: title,
+        content: ocrResult.text,
+        snippet: snippet,
+        sourceType: DocumentSourceType.file,
+        createdAt: now,
+        lastReadAt: now,
+        currentWordIndex: 0,
+        totalWords: totalWords,
+      );
+
+      final repo = ref.read(readingHistoryRepositoryProvider);
+      await repo.saveDocument(newDoc);
+      await loadHistory();
+      return newDoc;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Gagal memilih gambar dari galeri: ${e.toString()}',
+      );
+      return null;
+    }
+  }
+
+  /// 2. Aksi Unggah Berkas / Dokumen (PDF atau Gambar)
   Future<ReadingDocument?> pickFromFileOrGallery() async {
     try {
       final result = await FilePicker.pickFiles(

@@ -6,19 +6,29 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../../core/utils/accessibility_utils.dart';
 import '../../../../core/widgets/loading_overlay.dart';
+import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../domain/models/reading_document.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/action_card.dart';
 import '../widgets/reading_history_card.dart';
+import '../widgets/upload_source_dialog.dart';
 import 'manual_text_dialog.dart';
 import 'reader_screen.dart';
 
 /// Layar Beranda (Home Screen) LexiRead:
 /// Didesain dengan prinsip aksesibilitas disleksia dewasa:
-/// Latar belakang krem lembut, font Lexend, 3 tombol aksi kartu besar yang mudah dijangkau,
+/// Latar belakang krem lembut (#FDFBF7), font Lexend, 3 tombol aksi kartu besar yang mudah dijangkau,
 /// dan daftar riwayat bacaan dengan visual progress bar.
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  // 0: Semua, 1: Sedang Dibaca, 2: Selesai
+  int _selectedFilter = 0;
 
   void _openReader(BuildContext context, ReadingDocument document) {
     Navigator.push(
@@ -29,11 +39,30 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  void _openSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SettingsScreen(),
+      ),
+    );
+  }
+
+  List<ReadingDocument> _filterDocuments(List<ReadingDocument> docs) {
+    if (_selectedFilter == 1) {
+      return docs.where((doc) => !doc.isCompleted).toList();
+    } else if (_selectedFilter == 2) {
+      return docs.where((doc) => doc.isCompleted).toList();
+    }
+    return docs;
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(homeControllerProvider);
     final controller = ref.read(homeControllerProvider.notifier);
     final greeting = AccessibilityUtils.getGreetingByTime();
+    final filteredHistory = _filterDocuments(state.history);
 
     // Tampilkan snackbar jika ada pesan error
     ref.listen<HomeState>(homeControllerProvider, (previous, next) {
@@ -70,36 +99,59 @@ class HomeScreen extends ConsumerWidget {
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
-                // Header Sapaan yang Tenang & Ramah
+                // Header Sapaan yang Tenang & Ramah + Tombol Pengaturan Aksesibilitas
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(
                       left: AppDimens.space20,
                       right: AppDimens.space20,
-                      top: AppDimens.space20,
+                      top: AppDimens.space16,
                       bottom: AppDimens.space12,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Tag Nama Aplikasi
+                        // Tag Nama Aplikasi & Tombol Pengaturan
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: AppColors.progressFill,
-                                shape: BoxShape.circle,
-                              ),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.progressFill,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: AppDimens.space8),
+                                Text(
+                                  AppStrings.appName.toUpperCase(),
+                                  style: AppTextStyles.badge.copyWith(
+                                    color: AppColors.primary,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: AppDimens.space8),
-                            Text(
-                              AppStrings.appName.toUpperCase(),
-                              style: AppTextStyles.badge.copyWith(
+
+                            // Tombol Pengaturan Tampilan Ramah Disleksia
+                            IconButton(
+                              icon: const Icon(
+                                Icons.tune_rounded,
+                                size: 24,
                                 color: AppColors.primary,
-                                letterSpacing: 1.2,
                               ),
+                              tooltip: 'Pengaturan Aksesibilitas Baca',
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppColors.primaryLight,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(AppDimens.radiusM),
+                                ),
+                              ),
+                              onPressed: () => _openSettings(context),
                             ),
                           ],
                         ),
@@ -151,7 +203,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppDimens.space16),
 
-                      // 2. Unggah Berkas / Galeri (File Picker: PDF & Gambar)
+                      // 2. Unggah Berkas / Galeri (File Picker: PDF & Gambar / Galeri Foto)
                       ActionCard(
                         title: AppStrings.actionUploadTitle,
                         subtitle: AppStrings.actionUploadSubtitle,
@@ -162,7 +214,16 @@ class HomeScreen extends ConsumerWidget {
                         iconColor: AppColors.actionUploadIcon,
                         iconBgColor: AppColors.actionUploadIconBg,
                         onTap: () async {
-                          final doc = await controller.pickFromFileOrGallery();
+                          final choice = await UploadSourceDialog.show(context);
+                          if (choice == null) return;
+
+                          ReadingDocument? doc;
+                          if (choice == UploadSourceChoice.gallery) {
+                            doc = await controller.pickFromGallery();
+                          } else {
+                            doc = await controller.pickFromFileOrGallery();
+                          }
+
                           if (doc != null && context.mounted) {
                             _openReader(context, doc);
                           }
@@ -199,7 +260,7 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
 
-                // SECTION TITLE: RIWAYAT BACAAN TERAKHIR
+                // SECTION TITLE & FILTER: RIWAYAT BACAAN TERAKHIR
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(
@@ -208,20 +269,55 @@ class HomeScreen extends ConsumerWidget {
                       top: 28.0,
                       bottom: AppDimens.space12,
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          AppStrings.historySectionTitle,
-                          style: AppTextStyles.headlineSmall.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              AppStrings.historySectionTitle,
+                              style: AppTextStyles.headlineSmall.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (state.history.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDimens.space8,
+                                  vertical: AppDimens.space2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceTinted,
+                                  borderRadius:
+                                      BorderRadius.circular(AppDimens.radiusS),
+                                ),
+                                child: Text(
+                                  '${state.history.length} dokumen',
+                                  style: AppTextStyles.badge.copyWith(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
+                        const SizedBox(height: AppDimens.space12),
+
+                        // Tombol Filter Status Bacaan (Semua, Sedang Dibaca, Selesai)
                         if (state.history.isNotEmpty)
-                          Text(
-                            '${state.history.length} dokumen',
-                            style: AppTextStyles.bodySmall,
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildFilterChip(0, 'Semua'),
+                                const SizedBox(width: AppDimens.space8),
+                                _buildFilterChip(1, 'Sedang Dibaca'),
+                                const SizedBox(width: AppDimens.space8),
+                                _buildFilterChip(2, 'Selesai'),
+                              ],
+                            ),
                           ),
                       ],
                     ),
@@ -229,7 +325,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
 
                 // DAFTAR RIWAYAT BACAAN DENGAN PROGRES
-                if (state.history.isEmpty)
+                if (filteredHistory.isEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -253,13 +349,17 @@ class HomeScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: AppDimens.space12),
                             Text(
-                              AppStrings.historyEmptyTitle,
+                              _selectedFilter == 0
+                                  ? AppStrings.historyEmptyTitle
+                                  : 'Tidak Ada Dokumen pada Kategori Ini',
                               style: AppTextStyles.titleMedium,
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 6.0),
                             Text(
-                              AppStrings.historyEmptySubtitle,
+                              _selectedFilter == 0
+                                  ? AppStrings.historyEmptySubtitle
+                                  : 'Ubah filter atau tambahkan dokumen baru untuk melihat daftar bacaan.',
                               style: AppTextStyles.bodyMedium,
                               textAlign: TextAlign.center,
                             ),
@@ -276,7 +376,7 @@ class HomeScreen extends ConsumerWidget {
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
-                          final doc = state.history[index];
+                          final doc = filteredHistory[index];
                           return Padding(
                             padding: const EdgeInsets.only(
                               bottom: AppDimens.space16,
@@ -288,12 +388,12 @@ class HomeScreen extends ConsumerWidget {
                             ),
                           );
                         },
-                        childCount: state.history.length,
+                        childCount: filteredHistory.length,
                       ),
                     ),
                   ),
 
-                // Ruang santai di bawah
+                // Ruang santai di bawah agar tidak terpotong tepi layar
                 const SliverToBoxAdapter(
                   child: SizedBox(height: AppDimens.space32),
                 ),
@@ -311,6 +411,38 @@ class HomeScreen extends ConsumerWidget {
               },
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(int index, String label) {
+    final isSelected = _selectedFilter == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFilter = index;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.space16,
+          vertical: AppDimens.space8,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : AppColors.surfaceWarm,
+          borderRadius: BorderRadius.circular(AppDimens.radiusM),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: 1.2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.button.copyWith(
+            fontSize: 13,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
       ),
     );
   }

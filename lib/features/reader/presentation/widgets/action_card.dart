@@ -125,7 +125,7 @@ class ActionCard extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: AppColors.surfaceWarm,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: borderColor,
