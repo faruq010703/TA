@@ -55,5 +55,34 @@ class AppColors {
   static const Color error = Color(0xFFC53030);
   static const Color errorLight = Color(0xFFFED7D7);
   static const Color success = Color(0xFF276749);
+
+  // Tema Warna Aksesibilitas Khusus (Disleksia / Irlen Syndrome)
+  static const Color themeCreamBg = Color(0xFFF4EEDD); // Krem lembut ramah visual crowding
+  static const Color themeCreamSurface = Color(0xFFFAF7EF);
+  static const Color themeCreamShading = Color(0xFFECE5D2);
+  static const Color themeCreamBorder = Color(0xFFDFD7C4);
+
+  static const Color themePeachBg = Color(0xFFFEEFE3); // Peach hangat
+  static const Color themePeachSurface = Color(0xFFFFF6F0);
+  static const Color themePeachShading = Color(0xFFF7DFD0);
+  static const Color themePeachBorder = Color(0xFFE8D0BF);
+  static const Color themePeachText = Color(0xFF2E2620);
+
+  static const Color themePastelBlueBg = Color(0xFFE8F1F5); // Pastel Blue teduh
+  static const Color themePastelBlueSurface = Color(0xFFF2F7FA);
+  static const Color themePastelBlueShading = Color(0xFFD6E4EB);
+  static const Color themePastelBlueBorder = Color(0xFFCADAE3);
+  static const Color themePastelBlueText = Color(0xFF1E252B);
+
+  static const Color themeDarkBg = Color(0xFF1E1E1E); // Dark mode kontras lembut (bukan #000000)
+  static const Color themeDarkSurface = Color(0xFF252525);
+  static const Color themeDarkShading = Color(0xFF2C2C2C);
+  static const Color themeDarkBorder = Color(0xFF383838);
+  static const Color themeDarkText = Color(0xFFD4D4D4);
+
+  // Pemenggalan Suku Kata Fonik Berwarna Alternatif
+  static const Color phonicPrimary = Color(0xFF2563EB); // Biru fonik
+  static const Color phonicSecondary = Color(0xFF7C3AED); // Ungu fonik
+  static const Color phonicTertiary = Color(0xFF059669); // Hijau fonik
 }
 

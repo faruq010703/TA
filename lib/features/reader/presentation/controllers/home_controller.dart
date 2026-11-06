@@ -86,6 +86,22 @@ class HomeNotifier extends Notifier<HomeState> {
     state = state.copyWith(clearError: true);
   }
 
+  /// Memilih citra dari kamera atau galeri untuk diarahkan ke layar pra-pemrosesan OCR
+  Future<String?> pickImagePath({required ImageSource source}) async {
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 92,
+      );
+      return photo?.path;
+    } catch (e) {
+      state = state.copyWith(
+        errorMessage: 'Gagal mengambil gambar: $e',
+      );
+      return null;
+    }
+  }
+
   /// 1. Aksi Ambil Foto Dokumen melalui Kamera
   Future<ReadingDocument?> pickFromCamera() async {
     try {

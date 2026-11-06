@@ -7,12 +7,14 @@ import '../../../../core/theme/text_styles.dart';
 import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
 import '../../domain/models/reading_document.dart';
+import '../../domain/services/syllable_service.dart';
 import '../../domain/services/tts_service.dart';
 import '../controllers/home_controller.dart';
-import '../widgets/reader_settings_sheet.dart';
+import '../widgets/advanced_audio_sheet.dart';
 import '../widgets/reading_progress_bar.dart';
-import '../widgets/summary_sheet.dart';
 import '../widgets/syllable_dialog.dart';
+import '../widgets/typography_sheet.dart';
+import 'summary_screen.dart';
 
 /// Struktur blok paragraf untuk pemetaan penyorotan kata dan auto-scrolling
 class _ParagraphBlock {
@@ -30,9 +32,9 @@ class _ParagraphBlock {
 }
 
 /// Layar pembaca teks adaptif ramah disleksia dewasa:
-/// Menampilkan teks hasil ekstraksi OCR / berkas / manual dengan format yang dapat
-/// disesuaikan secara dinamis, fitur Read-Along TTS (penyorotan kata real-time & auto-scroll),
-/// analisis pemenggal suku kata interaktif, dan peringkas teks mandiri TextRank.
+/// Menampilkan teks dengan tipografi adaptif, fitur penyorotan kata Read-Along real-time,
+/// pemenggalan fonik suku kata berwarna bergantian, floating control bar audio,
+/// dan penggaris fokus baca interaktif (reading ruler).
 class ReaderScreen extends ConsumerStatefulWidget {
   final ReadingDocument document;
 
@@ -99,29 +101,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           globalCharStart: actualStart,
           globalCharEnd: actualEnd,
         );
+
         blocks.add(block);
         _paragraphKeys[paragraphIdx] = GlobalKey();
         paragraphIdx++;
+
         currentOffset = actualEnd;
-      } else {
-        currentOffset += line.length + 1;
       }
+    }
+
+    if (blocks.isEmpty) {
+      blocks.add(_ParagraphBlock(
+        index: 0,
+        text: fullText,
+        globalCharStart: 0,
+        globalCharEnd: fullText.length,
+      ));
+      _paragraphKeys[0] = GlobalKey();
     }
 
     _paragraphs = blocks;
   }
 
   void _initTtsListeners() {
-    final settings = ref.read(settingsControllerProvider);
-    _ttsService.setSpeechRate(settings.speechRate);
+    _ttsState = _ttsService.playbackState;
 
     _ttsSubscription = _ttsService.stateStream.listen((state) {
       if (mounted) {
         setState(() {
           _ttsState = state;
-          if (state == TtsPlaybackState.stopped) {
-            _currentHighlight = TtsWordHighlight.empty;
-          }
         });
       }
     });
@@ -134,6 +142,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
         if (highlight.isActive) {
           _checkAutoScroll(highlight);
+          _updateReadingProgress(highlight);
         }
       }
     });
@@ -141,12 +150,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _scrollController.addListener(_onManualScroll);
   }
 
-  void _onManualScroll() {
-    if (!_scrollController.hasClients) return;
-    final maxScroll = _scrollController.position.maxScrollExtent;
-    final currentScroll = _scrollController.position.pixels;
+  void _updateReadingProgress(TtsWordHighlight highlight) {
+    if (highlight.wordIndex >= 0 && _currentDoc.totalWords > 0) {
+      final newIndex = highlight.wordIndex.clamp(0, _currentDoc.totalWords);
+      if ((newIndex - _currentDoc.currentWordIndex).abs() >= 2) {
+        setState(() {
+          _currentDoc = _currentDoc.copyWith(currentWordIndex: newIndex);
+        });
+        ref
+            .read(homeControllerProvider.notifier)
+            .updateDocumentProgress(_currentDoc.id, newIndex);
+      }
+    }
+  }
 
-    if (maxScroll > 0) {
+  void _onManualScroll() {
+    if (_scrollController.hasClients && _currentDoc.totalWords > 0) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.position.pixels;
+      if (maxScroll <= 0) return;
+
       final ratio = (currentScroll / maxScroll).clamp(0.0, 1.0);
       final wordEstimate = (ratio * _currentDoc.totalWords).round();
 
@@ -194,6 +217,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Future<void> _playTts() async {
     final settings = ref.read(settingsControllerProvider);
     await _ttsService.setSpeechRate(settings.speechRate);
+    await _ttsService.setPitch(settings.pitch);
 
     if (_ttsState == TtsPlaybackState.paused && _currentHighlight.charStart > 0) {
       await _ttsService.speak(
@@ -217,15 +241,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
-  void _openSettingsSheet() {
-    ReaderSettingsSheet.show(context);
+  void _openTypographySheet() {
+    TypographySheet.show(context);
   }
 
-  void _openSummarySheet() {
-    SummarySheet.show(
+  void _openAdvancedAudioSheet() {
+    AdvancedAudioSheet.show(context, ttsService: _ttsService);
+  }
+
+  void _openSummaryScreen() {
+    Navigator.push(
       context,
-      fullText: _currentDoc.content,
-      ttsService: _ttsService,
+      MaterialPageRoute(
+        builder: (_) => SummaryScreen(
+          fullText: _currentDoc.content,
+          documentTitle: _currentDoc.title,
+        ),
+      ),
     );
   }
 
@@ -233,6 +265,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsControllerProvider);
     final theme = settings.colorTheme;
+    final isRulerVisible = settings.showReadingRuler && _isRulerEnabled;
 
     return Scaffold(
       backgroundColor: theme.backgroundColor,
@@ -245,21 +278,33 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           tooltip: 'Kembali ke Beranda',
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          _currentDoc.title,
-          style: AppTextStyles.titleMedium.copyWith(
-            fontWeight: FontWeight.w700,
-            color: theme.textColor,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _currentDoc.title,
+              style: AppTextStyles.titleMedium.copyWith(
+                fontWeight: FontWeight.w700,
+                color: theme.textColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              '${(_currentDoc.progressRatio * 100).toStringAsFixed(0)}% telah dibaca',
+              style: AppTextStyles.bodySmall.copyWith(
+                fontSize: 11,
+                color: theme.textColor.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
         ),
         actions: [
-          // Tombol Ringkas Dokumen (TextRank Ekstraktif Lokal)
+          // Tombol Ringkas Dokumen (TextRank)
           TextButton.icon(
-            onPressed: _openSummarySheet,
+            onPressed: _openSummaryScreen,
             icon: const Icon(
-              Icons.auto_awesome_rounded,
+              Icons.auto_stories_rounded,
               size: 17,
               color: AppColors.actionUploadIcon,
             ),
@@ -279,49 +324,44 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 6.0),
+          const SizedBox(width: 4),
 
-          // Toggle Penggaris Baca (Reading Ruler)
-          IconButton(
-            icon: Icon(
-              _isRulerEnabled
-                  ? Icons.view_headline_rounded
-                  : Icons.view_headline_outlined,
-              color: _isRulerEnabled
-                  ? AppColors.primary
-                  : theme.textColor.withValues(alpha: 0.6),
-            ),
-            tooltip: _isRulerEnabled
-                ? 'Sembunyikan Penggaris Baca'
-                : 'Tampilkan Penggaris Baca',
-            onPressed: () {
-              setState(() {
-                _isRulerEnabled = !_isRulerEnabled;
-              });
-            },
-          ),
-
-          // Tombol Panel Pengaturan Tampilan Baca
+          // Tombol Setelan Tipografi (Aa)
           IconButton(
             icon: Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
               decoration: BoxDecoration(
                 color: theme.shadingColor,
                 borderRadius: BorderRadius.circular(AppDimens.radiusS),
+                border: Border.all(color: theme.borderColor),
               ),
-              child: const Icon(
-                Icons.tune_rounded,
-                size: 20,
-                color: AppColors.primary,
+              child: Text(
+                'Aa',
+                style: AppTextStyles.badge.copyWith(
+                  color: theme.textColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-            tooltip: 'Pengaturan Tampilan Teks & Warna',
-            onPressed: _openSettingsSheet,
+            tooltip: 'Pengaturan Tipografi (Aa)',
+            onPressed: _openTypographySheet,
+          ),
+
+          // Tombol Audio Lanjutan (Equalizer)
+          IconButton(
+            icon: Icon(
+              Icons.tune_rounded,
+              size: 22,
+              color: theme.textColor,
+            ),
+            tooltip: 'Setelan Audio Lanjutan',
+            onPressed: _openAdvancedAudioSheet,
           ),
           const SizedBox(width: AppDimens.space8),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(18.0),
+          preferredSize: const Size.fromHeight(16.0),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppDimens.space20),
             child: ReadingProgressBar(
@@ -335,7 +375,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
       body: Stack(
         children: [
-          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF DENGAN INTERAKSI SUKU KATA & READ-ALONG
+          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF
           SingleChildScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
@@ -343,7 +383,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               left: AppDimens.space16,
               right: AppDimens.space16,
               top: AppDimens.space20,
-              bottom: 140.0,
+              bottom: 160.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -377,7 +417,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
 
           // PENGGARIS BACA INTERAKTIF YANG DAPAT DIGESER (Interactive Reading Ruler)
-          if (_isRulerEnabled)
+          if (isRulerVisible)
             Positioned(
               top: _rulerOffsetY,
               left: 0,
@@ -387,7 +427,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 onVerticalDragUpdate: (details) {
                   setState(() {
                     _rulerOffsetY = (_rulerOffsetY + details.delta.dy)
-                        .clamp(60.0, MediaQuery.of(context).size.height - 200.0);
+                        .clamp(60.0, MediaQuery.of(context).size.height - 220.0);
                   });
                 },
                 child: Container(
@@ -441,7 +481,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ],
       ),
 
-      // BILAH NAVIGASI AUDIO BAWAH (Play, Pause, Stop, Kecepatan, Format Teks)
+      // FLOATING CONTROL BAR AUDIO DI BAGIAN BAWAH
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppDimens.space16,
@@ -464,123 +504,123 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ],
         ),
         child: SafeArea(
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // 1. Tombol Buka Panel Format Teks
-              IconButton(
-                onPressed: _openSettingsSheet,
-                icon: const Icon(Icons.format_size_rounded, size: 22),
-                tooltip: 'Format Teks & Font',
-                style: IconButton.styleFrom(
-                  foregroundColor: theme.textColor,
-                  backgroundColor: theme.shadingColor,
-                  minimumSize: const Size(42, 42),
-                ),
-              ),
-              const SizedBox(width: AppDimens.space8),
-
-              // 2. Chip Pengaturan Kecepatan Suara Cepat (0.3x - 1.0x)
-              GestureDetector(
-                onTap: () {
-                  double nextRate = 0.5;
-                  if (settings.speechRate < 0.45) {
-                    nextRate = 0.5;
-                  } else if (settings.speechRate < 0.65) {
-                    nextRate = 0.7;
-                  } else if (settings.speechRate < 0.9) {
-                    nextRate = 1.0;
-                  } else {
-                    nextRate = 0.35;
-                  }
-                  ref
-                      .read(settingsControllerProvider.notifier)
-                      .updateSpeechRate(nextRate);
-                  _ttsService.setSpeechRate(nextRate);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
+              // Slider Kecepatan Membaca (0.5x - 1.5x) & Ruler Toggle
+              Row(
+                children: [
+                  // Toggle Ruler Icon
+                  IconButton(
+                    icon: Icon(
+                      _isRulerEnabled
+                          ? Icons.view_headline_rounded
+                          : Icons.view_headline_outlined,
+                      color: _isRulerEnabled
+                          ? AppColors.primary
+                          : theme.textColor.withValues(alpha: 0.6),
+                      size: 20,
+                    ),
+                    tooltip: 'Toggle Penggaris Baca',
+                    onPressed: () {
+                      setState(() {
+                        _isRulerEnabled = !_isRulerEnabled;
+                      });
+                    },
                   ),
-                  decoration: BoxDecoration(
-                    color: theme.shadingColor,
-                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
-                    border: Border.all(color: theme.borderColor),
+                  Text(
+                    '${settings.speechRate.toStringAsFixed(1)}x',
+                    style: AppTextStyles.badge.copyWith(
+                      color: theme.textColor,
+                      fontSize: 12,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.speed_rounded, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${settings.speechRate.toStringAsFixed(2)}x',
-                        style: AppTextStyles.badge.copyWith(
-                          color: theme.textColor,
-                          fontSize: 11,
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: AppColors.primary,
+                        inactiveTrackColor: theme.textColor.withValues(alpha: 0.15),
+                        thumbColor: AppColors.primary,
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
                         ),
                       ),
-                    ],
+                      child: Slider(
+                        value: settings.speechRate,
+                        min: 0.5,
+                        max: 1.5,
+                        divisions: 10,
+                        onChanged: (val) {
+                          ref
+                              .read(settingsControllerProvider.notifier)
+                              .updateSpeechRate(val);
+                          _ttsService.setSpeechRate(val);
+                        },
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const Spacer(),
-
-              // 3. Tombol STOP Navigasi Audio
-              IconButton(
-                onPressed: _ttsState != TtsPlaybackState.stopped ? _stopTts : null,
-                icon: const Icon(Icons.stop_rounded, size: 26),
-                tooltip: 'Berhenti & Hapus Sorotan',
-                style: IconButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  disabledForegroundColor:
-                      theme.textColor.withValues(alpha: 0.3),
-                  backgroundColor: theme.shadingColor,
-                  minimumSize: const Size(44, 44),
-                ),
-              ),
-              const SizedBox(width: AppDimens.space8),
-
-              // 4. Tombol PAUSE Navigasi Audio
-              IconButton(
-                onPressed: _ttsState == TtsPlaybackState.playing ? _pauseTts : null,
-                icon: const Icon(Icons.pause_rounded, size: 26),
-                tooltip: 'Jeda Suara',
-                style: IconButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  disabledForegroundColor:
-                      theme.textColor.withValues(alpha: 0.3),
-                  backgroundColor: theme.shadingColor,
-                  minimumSize: const Size(44, 44),
-                ),
-              ),
-              const SizedBox(width: AppDimens.space8),
-
-              // 5. Tombol PLAY Navigasi Audio
-              ElevatedButton.icon(
-                onPressed:
-                    _ttsState != TtsPlaybackState.playing ? _playTts : _pauseTts,
-                icon: Icon(
-                  _ttsState == TtsPlaybackState.playing
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  size: 24,
-                ),
-                label: Text(
-                  _ttsState == TtsPlaybackState.playing
-                      ? 'Jeda'
-                      : (_ttsState == TtsPlaybackState.paused
-                          ? 'Lanjut'
-                          : 'Bacakan'),
-                  style: AppTextStyles.button,
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(116.0, AppDimens.minTouchTarget),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppDimens.space16,
+                  IconButton(
+                    icon: const Icon(Icons.stop_rounded, size: 24),
+                    color: AppColors.error,
+                    tooltip: 'Hentikan Audio',
+                    onPressed: _ttsState != TtsPlaybackState.stopped ? _stopTts : null,
                   ),
-                ),
+                ],
+              ),
+
+              // Baris Kontrol Audio: Lompat -10s, Play/Pause, Lompat +10s
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Lompat Mundur -10s / 60 Karakter
+                  IconButton(
+                    onPressed: () => _ttsService.jumpOffset(-60),
+                    icon: const Icon(Icons.replay_10_rounded, size: 28),
+                    color: theme.textColor,
+                    tooltip: 'Mundur 10 Detik / Kalimat Sebelumnya',
+                  ),
+                  const SizedBox(width: AppDimens.space16),
+
+                  // Tombol Play / Pause Utama
+                  ElevatedButton.icon(
+                    onPressed: _ttsState != TtsPlaybackState.playing
+                        ? _playTts
+                        : _pauseTts,
+                    icon: Icon(
+                      _ttsState == TtsPlaybackState.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 26,
+                    ),
+                    label: Text(
+                      _ttsState == TtsPlaybackState.playing
+                          ? 'Jeda'
+                          : (_ttsState == TtsPlaybackState.paused
+                              ? 'Lanjutkan'
+                              : 'Bacakan'),
+                      style: AppTextStyles.button.copyWith(fontSize: 15),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(130.0, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppDimens.space16),
+
+                  // Lompat Maju +10s / 60 Karakter
+                  IconButton(
+                    onPressed: () => _ttsService.jumpOffset(60),
+                    icon: const Icon(Icons.forward_10_rounded, size: 28),
+                    color: theme.textColor,
+                    tooltip: 'Maju 10 Detik / Kalimat Berikutnya',
+                  ),
+                ],
               ),
             ],
           ),
@@ -589,7 +629,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  /// Membangun teks paragraf dengan kata-kata interaktif (ketuk untuk pemenggalan suku kata)
+  /// Membangun teks paragraf dengan opsi pewarnaan suku kata fonik
   /// dan penyorotan kata aktif real-time (Read-Along TTS)
   Widget _buildParagraphText(
     _ParagraphBlock block,
@@ -600,21 +640,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
+      wordSpacing: settings.wordSpacing,
       color: theme.textColor,
       fontWeight: FontWeight.w400,
     );
 
-    // Tokenisasi kata-kata dalam paragraf
     final words = block.text.split(RegExp(r'\s+'));
-
     int runningCharOffset = block.globalCharStart;
 
     return Wrap(
-      spacing: 5.0,
+      spacing: 6.0,
       runSpacing: 4.0,
       children: words.map((rawWord) {
         final cleanWord = rawWord.replaceAll(RegExp(r'[^\w]'), '');
-        final wordStart = block.text.indexOf(rawWord, runningCharOffset - block.globalCharStart) + block.globalCharStart;
+        final wordStart = block.text.indexOf(
+                rawWord, runningCharOffset - block.globalCharStart) +
+            block.globalCharStart;
         final wordEnd = wordStart + rawWord.length;
         runningCharOffset = wordEnd;
 
@@ -622,7 +663,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         final isHighlighted = _currentHighlight.isActive &&
             ((_currentHighlight.charStart >= wordStart &&
                     _currentHighlight.charStart < wordEnd) ||
-                (_currentHighlight.word.toLowerCase() == cleanWord.toLowerCase() &&
+                (_currentHighlight.word.toLowerCase() ==
+                        cleanWord.toLowerCase() &&
                     cleanWord.isNotEmpty &&
                     _currentHighlight.charStart >= block.globalCharStart &&
                     _currentHighlight.charStart < block.globalCharEnd));
@@ -640,7 +682,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           },
           child: Container(
             padding: EdgeInsets.symmetric(
-              horizontal: isHighlighted ? 4.0 : 1.0,
+              horizontal: isHighlighted ? 5.0 : 1.0,
               vertical: isHighlighted ? 2.0 : 0.0,
             ),
             decoration: isHighlighted
@@ -653,18 +695,69 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     ),
                   )
                 : null,
-            child: Text(
-              rawWord,
-              style: baseStyle.copyWith(
-                color: isHighlighted
-                    ? AppColors.highlightWordText
-                    : theme.textColor,
-                fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w400,
-              ),
+            child: _buildWordContent(
+              rawWord: rawWord,
+              cleanWord: cleanWord,
+              baseStyle: baseStyle,
+              isHighlighted: isHighlighted,
+              settings: settings,
+              theme: theme,
             ),
           ),
         );
       }).toList(),
+    );
+  }
+
+  /// Membangun kata dengan pewarnaan suku kata fonik alternatif (contoh: me-to-do-lo-gi)
+  Widget _buildWordContent({
+    required String rawWord,
+    required String cleanWord,
+    required TextStyle baseStyle,
+    required bool isHighlighted,
+    required ReaderSettings settings,
+    required ReaderColorTheme theme,
+  }) {
+    if (isHighlighted) {
+      return Text(
+        rawWord,
+        style: baseStyle.copyWith(
+          color: AppColors.highlightWordText,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    // Pewarnaan suku kata berselang warna jika opsi fonik diaktifkan
+    if (settings.phonicSyllableColoring && cleanWord.length > 2) {
+      final syllables = SyllableService.syllabify(cleanWord);
+      if (syllables.length > 1) {
+        return RichText(
+          text: TextSpan(
+            children: List.generate(syllables.length, (idx) {
+              final color = idx.isEven
+                  ? (theme.isDark
+                      ? const Color(0xFF93C5FD)
+                      : AppColors.phonicPrimary)
+                  : (theme.isDark
+                      ? const Color(0xFFC084FC)
+                      : AppColors.phonicSecondary);
+              return TextSpan(
+                text: syllables[idx],
+                style: baseStyle.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              );
+            }),
+          ),
+        );
+      }
+    }
+
+    return Text(
+      rawWord,
+      style: baseStyle.copyWith(color: theme.textColor),
     );
   }
 }

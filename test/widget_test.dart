@@ -4,11 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lexiread/core/constants/app_strings.dart';
 import 'package:lexiread/features/ocr/data/ocr_service.dart';
+import 'package:lexiread/features/ocr/presentation/screens/ocr_preprocessing_screen.dart';
+import 'package:lexiread/features/ocr/presentation/screens/ocr_result_screen.dart';
+import 'package:lexiread/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:lexiread/features/reader/domain/models/reading_document.dart';
 import 'package:lexiread/features/reader/domain/services/syllable_service.dart';
 import 'package:lexiread/features/reader/domain/services/text_rank_summarizer.dart';
 import 'package:lexiread/features/reader/domain/services/tts_service.dart';
 import 'package:lexiread/features/reader/presentation/screens/reader_screen.dart';
+import 'package:lexiread/features/reader/presentation/screens/summary_screen.dart';
 import 'package:lexiread/features/settings/domain/reader_settings.dart';
 import 'package:lexiread/features/settings/presentation/controllers/settings_controller.dart';
 import 'package:lexiread/main.dart';
@@ -69,9 +73,13 @@ void main() {
       fontSize: 22.0,
       lineSpacing: 2.1,
       letterSpacing: 1.2,
+      wordSpacing: 2.2,
       enableLineShading: true,
       colorTheme: ReaderColorTheme.pastelYellow,
       speechRate: 0.52,
+      pitch: 1.1,
+      interWordPauseMs: 250,
+      phonicSyllableColoring: true,
       showReadingRuler: false,
     );
 
@@ -82,9 +90,13 @@ void main() {
     expect(restored.fontSize, 22.0);
     expect(restored.lineSpacing, 2.1);
     expect(restored.letterSpacing, 1.2);
+    expect(restored.wordSpacing, 2.2);
     expect(restored.enableLineShading, isTrue);
     expect(restored.colorTheme, ReaderColorTheme.pastelYellow);
     expect(restored.speechRate, 0.52);
+    expect(restored.pitch, 1.1);
+    expect(restored.interWordPauseMs, 250);
+    expect(restored.phonicSyllableColoring, isTrue);
     expect(restored.showReadingRuler, isFalse);
   });
 
@@ -108,9 +120,9 @@ void main() {
     ttsService.dispose();
   });
 
-  testWidgets('LexiRead smoke test - verify action cards render',
+  testWidgets('LexiRead smoke test - verify action cards render in HomeScreen',
       (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'has_completed_onboarding': true});
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
@@ -118,7 +130,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
         ],
-        child: const LexiReadApp(),
+        child: const LexiReadApp(hasCompletedOnboarding: true),
       ),
     );
 
@@ -128,9 +140,120 @@ void main() {
     expect(find.text(AppStrings.actionCameraTitle), findsOneWidget);
     expect(find.text(AppStrings.actionUploadTitle), findsOneWidget);
     expect(find.text(AppStrings.actionPasteTitle), findsOneWidget);
+
+    // Pastikan FAB kamera dan statistik membaca tampil
+    expect(find.text('Pindai Dokumen Baru'), findsOneWidget);
+    expect(find.text('Waktu Membaca'), findsOneWidget);
+    expect(find.text('Tuntas 100%'), findsOneWidget);
   });
 
-  testWidgets('ReaderScreen interaksi pemenggalan suku kata, tombol ringkas, dan panel pengaturan',
+  testWidgets('OnboardingScreen 3-step navigation flow',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
+        child: const MaterialApp(
+          home: OnboardingScreen(),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // Layar 1: Kalibrasi Tipografi
+    expect(find.text('LANGKAH 1 DARI 3: KALIBRASI TIPOGRAFI'), findsOneWidget);
+    expect(find.text('Ukuran Font'), findsOneWidget);
+    expect(find.text('Mulai Kalibrasi'), findsOneWidget);
+
+    // Pindah ke Layar 2
+    await tester.tap(find.text('Mulai Kalibrasi'));
+    await tester.pumpAndSettle();
+
+    // Layar 2: Dual-Coding Audio-Visual
+    expect(find.text('LANGKAH 2 DARI 3: DUAL-CODING AUDIO-VISUAL'), findsOneWidget);
+    expect(find.text('Lanjut ke Kamera'), findsOneWidget);
+
+    // Pindah ke Layar 3
+    await tester.tap(find.text('Lanjut ke Kamera'));
+    await tester.pumpAndSettle();
+
+    // Layar 3: Penyelarasan Kamera OCR
+    expect(find.text('LANGKAH 3 DARI 3: PRESISI PEMINDAIAN OCR'), findsOneWidget);
+    expect(find.text('Selesai & Mulai Membaca'), findsOneWidget);
+  });
+
+  testWidgets('OcrPreprocessingScreen UI controls render',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: OcrPreprocessingScreen(
+            imagePath: 'dummy_sample.jpg',
+            documentTitle: 'Bab 4: Analisis Data',
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pra-Pemrosesan Dokumen'), findsOneWidget);
+    expect(find.text('Grayscale'), findsOneWidget);
+    expect(find.text('Biner (Tajam)'), findsOneWidget);
+    expect(find.text('Proses Ekstraksi OCR Sekarang'), findsOneWidget);
+  });
+
+  testWidgets('OcrResultScreen metrics and actions render',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: OcrResultScreen(
+            rawText: 'Contoh teks hasil ekstraksi bab 4 analisis data.',
+            documentTitle: 'Bab 4: Analisis Data',
+            blocksCount: 3,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hasil Ekstraksi OCR'), findsOneWidget);
+    expect(find.text('ANALISIS DATA OCR'), findsOneWidget);
+    expect(find.text('Akurasi 98.4%'), findsOneWidget);
+    expect(find.text('Buka di Layar Baca'), findsOneWidget);
+    expect(find.text('Salin Teks'), findsOneWidget);
+  });
+
+  testWidgets('SummaryScreen TextRank and Read-Along render',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: SummaryScreen(
+            fullText:
+                'Kalimat pertama dokumen. Kalimat kedua yang penting. Kalimat ketiga penjelas.',
+            documentTitle: 'Dokumen Uji',
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ringkasan Dokumen'), findsOneWidget);
+    expect(find.text('TextRank Ekstraktif'), findsOneWidget);
+    expect(find.text('Dengarkan Ringkasan Audio'), findsOneWidget);
+    expect(find.text('Kirim ke WhatsApp / Grup'), findsOneWidget);
+  });
+
+  testWidgets('ReaderScreen interaksi pemenggalan suku kata, ringkasan, dan kontrol audio',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -163,15 +286,8 @@ void main() {
 
     expect(find.text('Dokumen Uji'), findsOneWidget);
 
-    // 1. Verifikasi tombol Ringkas dokumen tersedia dan membuka SummarySheet
+    // 1. Verifikasi tombol Ringkas dokumen tersedia
     expect(find.text('Ringkas'), findsOneWidget);
-    await tester.tap(find.text('Ringkas'));
-    await tester.pumpAndSettle();
-    expect(find.text('Ringkasan Inti Dokumen'), findsOneWidget);
-
-    // Tutup SummarySheet
-    await tester.tap(find.byIcon(Icons.close_rounded));
-    await tester.pumpAndSettle();
 
     // 2. Verifikasi ketuk kata "mempertahankan" membuka SyllableDialog
     await tester.tap(find.text('mempertahankan'));
@@ -184,9 +300,10 @@ void main() {
     await tester.tap(find.byTooltip('Tutup'));
     await tester.pumpAndSettle();
 
-    // 3. Verifikasi tombol navigasi audio Play, Pause, dan Stop tersedia
+    // 3. Verifikasi tombol navigasi audio Bacakan dan kontrol tersedia
     expect(find.text('Bacakan'), findsOneWidget);
-    expect(find.byTooltip('Jeda Suara'), findsOneWidget);
-    expect(find.byTooltip('Berhenti & Hapus Sorotan'), findsOneWidget);
+    expect(find.byTooltip('Hentikan Audio'), findsOneWidget);
+    expect(find.byTooltip('Mundur 10 Detik / Kalimat Sebelumnya'), findsOneWidget);
+    expect(find.byTooltip('Maju 10 Detik / Kalimat Berikutnya'), findsOneWidget);
   });
 }

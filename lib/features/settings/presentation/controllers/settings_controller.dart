@@ -26,17 +26,37 @@ class SettingsNotifier extends Notifier<ReaderSettings> {
   }
 
   Future<void> updateFontSize(double newSize) async {
-    state = state.copyWith(fontSize: newSize.clamp(14.0, 26.0));
+    state = state.copyWith(fontSize: newSize.clamp(14.0, 28.0));
     await _save();
   }
 
   Future<void> updateLineSpacing(double newSpacing) async {
-    state = state.copyWith(lineSpacing: newSpacing.clamp(1.5, 2.5));
+    state = state.copyWith(lineSpacing: newSpacing.clamp(1.4, 2.6));
     await _save();
   }
 
   Future<void> updateLetterSpacing(double newSpacing) async {
-    state = state.copyWith(letterSpacing: newSpacing.clamp(0.0, 2.0));
+    state = state.copyWith(letterSpacing: newSpacing.clamp(0.0, 2.5));
+    await _save();
+  }
+
+  Future<void> updateWordSpacing(double newSpacing) async {
+    state = state.copyWith(wordSpacing: newSpacing.clamp(1.0, 3.5));
+    await _save();
+  }
+
+  Future<void> updatePitch(double newPitch) async {
+    state = state.copyWith(pitch: newPitch.clamp(0.5, 1.5));
+    await _save();
+  }
+
+  Future<void> updateInterWordPause(int pauseMs) async {
+    state = state.copyWith(interWordPauseMs: pauseMs.clamp(100, 800));
+    await _save();
+  }
+
+  Future<void> togglePhonicSyllableColoring(bool enabled) async {
+    state = state.copyWith(phonicSyllableColoring: enabled);
     await _save();
   }
 
@@ -51,7 +71,7 @@ class SettingsNotifier extends Notifier<ReaderSettings> {
   }
 
   Future<void> updateSpeechRate(double newRate) async {
-    state = state.copyWith(speechRate: newRate.clamp(0.3, 1.0));
+    state = state.copyWith(speechRate: newRate.clamp(0.3, 1.5));
     await _save();
   }
 

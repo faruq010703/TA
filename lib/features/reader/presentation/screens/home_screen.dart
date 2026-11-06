@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../../core/utils/accessibility_utils.dart';
 import '../../../../core/widgets/loading_overlay.dart';
+import '../../../ocr/presentation/screens/ocr_preprocessing_screen.dart';
+import '../../../onboarding/presentation/screens/onboarding_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../domain/models/reading_document.dart';
 import '../controllers/home_controller.dart';
@@ -17,8 +20,8 @@ import 'reader_screen.dart';
 
 /// Layar Beranda (Home Screen) LexiRead:
 /// Didesain dengan prinsip aksesibilitas disleksia dewasa:
-/// Latar belakang krem lembut (#FDFBF7), font Lexend, 3 tombol aksi kartu besar yang mudah dijangkau,
-/// dan daftar riwayat bacaan dengan visual progress bar.
+/// Latar belakang krem lembut (#FDFBF7), font Lexend, statistik waktu baca,
+/// 3 tombol aksi kartu besar, riwayat bacaan, dan FAB pemindaian kamera.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -48,6 +51,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _openOnboarding(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const OnboardingScreen(),
+      ),
+    );
+  }
+
+  Future<void> _scanWithCamera(BuildContext context) async {
+    final controller = ref.read(homeControllerProvider.notifier);
+    final imagePath =
+        await controller.pickImagePath(source: ImageSource.camera);
+    if (imagePath != null && context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OcrPreprocessingScreen(
+            imagePath: imagePath,
+            documentTitle:
+                'Foto Dokumen ${AccessibilityUtils.formatFriendlyDate(DateTime.now())}',
+          ),
+        ),
+      );
+    }
+  }
+
   List<ReadingDocument> _filterDocuments(List<ReadingDocument> docs) {
     if (_selectedFilter == 1) {
       return docs.where((doc) => !doc.isCompleted).toList();
@@ -63,6 +93,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final controller = ref.read(homeControllerProvider.notifier);
     final greeting = AccessibilityUtils.getGreetingByTime();
     final filteredHistory = _filterDocuments(state.history);
+
+    // Hitung statistik membaca
+    final completedDocs = state.history.where((d) => d.isCompleted).length;
+    final totalWordsRead = state.history.fold<int>(
+      0,
+      (sum, d) => sum + d.currentWordIndex,
+    );
+    final totalReadingMinutes = (totalWordsRead / 120).ceil();
 
     // Tampilkan snackbar jika ada pesan error
     ref.listen<HomeState>(homeControllerProvider, (previous, next) {
@@ -93,13 +131,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _scanWithCamera(context),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 3,
+        icon: const Icon(Icons.camera_alt_rounded, size: 22),
+        label: Text(
+          'Pindai Dokumen Baru',
+          style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 13.5),
+        ),
+      ),
       body: Stack(
         children: [
           SafeArea(
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
-                // Header Sapaan yang Tenang & Ramah + Tombol Pengaturan Aksesibilitas
+                // Header Sapaan yang Tenang & Ramah + Tombol Kalibrasi & Pengaturan
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.only(
@@ -111,7 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Tag Nama Aplikasi & Tombol Pengaturan
+                        // Tag Nama Aplikasi & Aksi Cepat Header
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -136,22 +185,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ],
                             ),
 
-                            // Tombol Pengaturan Tampilan Ramah Disleksia
-                            IconButton(
-                              icon: const Icon(
-                                Icons.tune_rounded,
-                                size: 24,
-                                color: AppColors.primary,
-                              ),
-                              tooltip: 'Pengaturan Aksesibilitas Baca',
-                              style: IconButton.styleFrom(
-                                backgroundColor: AppColors.primaryLight,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(AppDimens.radiusM),
+                            Row(
+                              children: [
+                                // Tombol Buka Alur Kalibrasi Tipografi (Onboarding)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.auto_fix_high_rounded,
+                                    size: 22,
+                                    color: AppColors.primary,
+                                  ),
+                                  tooltip: 'Kalibrasi Aksesibilitas (Onboarding)',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLight,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusM,
+                                      ),
+                                    ),
+                                  ),
+                                  onPressed: () => _openOnboarding(context),
                                 ),
-                              ),
-                              onPressed: () => _openSettings(context),
+                                const SizedBox(width: 8),
+
+                                // Tombol Pengaturan Aplikasi
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.tune_rounded,
+                                    size: 22,
+                                    color: AppColors.primary,
+                                  ),
+                                  tooltip: 'Pengaturan Aksesibilitas Baca',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLight,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusM,
+                                      ),
+                                    ),
+                                  ),
+                                  onPressed: () => _openSettings(context),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -176,6 +250,113 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
+                // KARTU STATISTIK WAKTU BACA & DOKUMEN TUNTAS 100%
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.space20,
+                      vertical: AppDimens.space6,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(AppDimens.space16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceWarm,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.actionUploadBg,
+                                    borderRadius: BorderRadius.circular(
+                                      AppDimens.radiusM,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.timer_outlined,
+                                    color: AppColors.actionUploadIcon,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Waktu Membaca',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$totalReadingMinutes Menit',
+                                      style: AppTextStyles.titleSmall.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 36,
+                            color: AppColors.border,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.actionCameraBg,
+                                    borderRadius: BorderRadius.circular(
+                                      AppDimens.radiusM,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    color: AppColors.actionCameraIcon,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tuntas 100%',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$completedDocs Dokumen',
+                                      style: AppTextStyles.titleSmall.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 6)),
+
                 // 3 KARTU AKSI UTAMA (Ukuran Besar & Mudah Ditekan)
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(
@@ -184,7 +365,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      // 1. Ambil Foto Dokumen (Kamera)
+                      // 1. Ambil Foto Dokumen (Kamera) -> Pra-Pemrosesan OCR
                       ActionCard(
                         title: AppStrings.actionCameraTitle,
                         subtitle: AppStrings.actionCameraSubtitle,
@@ -194,12 +375,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         borderColor: AppColors.actionCameraBorder,
                         iconColor: AppColors.actionCameraIcon,
                         iconBgColor: AppColors.actionCameraIconBg,
-                        onTap: () async {
-                          final doc = await controller.pickFromCamera();
-                          if (doc != null && context.mounted) {
-                            _openReader(context, doc);
-                          }
-                        },
+                        onTap: () => _scanWithCamera(context),
                       ),
                       const SizedBox(height: AppDimens.space16),
 
@@ -217,15 +393,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           final choice = await UploadSourceDialog.show(context);
                           if (choice == null) return;
 
-                          ReadingDocument? doc;
                           if (choice == UploadSourceChoice.gallery) {
-                            doc = await controller.pickFromGallery();
+                            final imagePath = await controller.pickImagePath(
+                              source: ImageSource.gallery,
+                            );
+                            if (imagePath != null && context.mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => OcrPreprocessingScreen(
+                                    imagePath: imagePath,
+                                    documentTitle:
+                                        'Dokumen Galeri ${AccessibilityUtils.formatFriendlyDate(DateTime.now())}',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
                           } else {
-                            doc = await controller.pickFromFileOrGallery();
-                          }
-
-                          if (doc != null && context.mounted) {
-                            _openReader(context, doc);
+                            final doc =
+                                await controller.pickFromFileOrGallery();
+                            if (doc != null && context.mounted) {
+                              _openReader(context, doc);
+                            }
                           }
                         },
                       ),
@@ -266,7 +456,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     padding: const EdgeInsets.only(
                       left: AppDimens.space20,
                       right: AppDimens.space20,
-                      top: 28.0,
+                      top: 24.0,
                       bottom: AppDimens.space12,
                     ),
                     child: Column(
@@ -384,7 +574,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             child: ReadingHistoryCard(
                               document: doc,
                               onTap: () => _openReader(context, doc),
-                              onDelete: () => controller.deleteDocument(doc.id),
+                              onDelete: () =>
+                                  controller.deleteDocument(doc.id),
                             ),
                           );
                         },
@@ -393,9 +584,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
 
-                // Ruang santai di bawah agar tidak terpotong tepi layar
+                // Ruang ekstra di bawah agar tidak tertutup FAB
                 const SliverToBoxAdapter(
-                  child: SizedBox(height: AppDimens.space32),
+                  child: SizedBox(height: 90.0),
                 ),
               ],
             ),

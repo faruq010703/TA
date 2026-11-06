@@ -53,6 +53,7 @@ class TtsService {
   TtsPlaybackState get playbackState => _playbackState;
   double get speechRate => _speechRate;
   String get currentText => _currentText;
+  int get lastPausedCharIndex => _lastPausedCharIndex;
 
   Future<void> initialize() async {
     try {
@@ -194,12 +195,28 @@ class TtsService {
     }
   }
 
-  /// Mengatur kecepatan membaca (speech rate: 0.3x - 1.0x)
+  /// Mengatur kecepatan membaca (speech rate: 0.3x - 1.5x)
   Future<void> setSpeechRate(double rate) async {
-    _speechRate = rate.clamp(0.3, 1.0);
+    _speechRate = rate.clamp(0.3, 1.5);
     try {
       await _flutterTts.setSpeechRate(_speechRate);
     } catch (_) {}
+  }
+
+  /// Mengatur nada suara (pitch: 0.5 - 1.5)
+  Future<void> setPitch(double pitch) async {
+    final clamped = pitch.clamp(0.5, 1.5);
+    try {
+      await _flutterTts.setPitch(clamped);
+    } catch (_) {}
+  }
+
+  /// Melompat mundur atau maju sejauh sejumlah karakter atau kata
+  Future<void> jumpOffset(int charDelta) async {
+    if (_currentText.isEmpty) return;
+    final newOffset = (_lastPausedCharIndex + charDelta).clamp(0, _currentText.length - 1);
+    await stop();
+    await speak(_currentText, fromCharIndex: newOffset);
   }
 
   /// Fallback ticker sinkronisasi kata jika mesin TTS platform tidak memicu onProgress
