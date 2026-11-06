@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 /// Palet warna yang dirancang khusus untuk kenyamanan membaca disleksia dewasa.
 /// Menghindari kontras hitam-putih murni yang menyilaukan (visual stress / scotopic sensitivity).
 class AppColors {
-  // Latar belakang utama: Off-white / krem lembut ramah mata (menghindari #FFFFFF murni)
-  static const Color background = Color(0xFFFDFBF7);
-  static const Color surface = Color(0xFFFAF7F0);
-  static const Color surfaceWarm = Color(0xFFF7F3EB);
-  static const Color surfaceTinted = Color(0xFFF3EFE6);
+  // Latar belakang utama: Krem lembut ramah mata (#F4EEDD mencegah visual stress / scotopic sensitivity)
+  static const Color background = Color(0xFFF4EEDD);
+  static const Color surface = Color(0xFFFAF7EF);
+  static const Color surfaceWarm = Color(0xFFECE5D2);
+  static const Color surfaceTinted = Color(0xFFE5DDD0);
 
   // Teks: Abu gelap arang & abu netral (bukan hitam pekat #000000)
   static const Color textPrimary = Color(0xFF1E242B);
@@ -49,7 +49,7 @@ class AppColors {
   static const Color highlightWordText = Color(0xFF1B1F24);
 
   // Status & Elemen UI
-  static const Color border = Color(0xFFE2DDD5);
+  static const Color border = Color(0xFFDFD7C4);
   static const Color borderStrong = Color(0xFFC5BDB2);
   static const Color shadow = Color(0x14000000);
   static const Color error = Color(0xFFC53030);

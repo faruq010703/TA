@@ -104,7 +104,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _startDemoLoop() {
     _demoTimer?.cancel();
-    final intervalMs = (400 / _demoRate).round();
+    final intervalMs = (420 / _demoRate).round();
 
     _demoTimer = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
       if (!mounted) return;
@@ -121,15 +121,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF4EEDD), // Latar krem lembut ramah disleksia
       body: SafeArea(
         child: Column(
           children: [
-            // Header Top Bar: Logo & Tombol Lewati
-            Padding(
+            // Header Top Bar: Logo Aplikasi, Badge Kalibrasi, dan Tombol Lewati
+            Container(
+              margin: const EdgeInsets.symmetric(
+                horizontal: AppDimens.space16,
+                vertical: AppDimens.space8,
+              ),
               padding: const EdgeInsets.symmetric(
-                horizontal: AppDimens.space20,
-                vertical: AppDimens.space12,
+                horizontal: AppDimens.space16,
+                vertical: AppDimens.space10,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAF7EF),
+                borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                border: Border.all(color: const Color(0xFFDFD7C4), width: 1.2),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -137,7 +146,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(7),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(AppDimens.radiusS),
@@ -145,34 +154,49 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         child: const Icon(
                           Icons.auto_stories_rounded,
                           color: AppColors.primary,
-                          size: 18,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: AppDimens.space8),
-                      Text(
-                        'LEXIREAD',
-                        style: AppTextStyles.badge.copyWith(
-                          color: AppColors.primary,
-                          letterSpacing: 1.2,
-                        ),
+                      const SizedBox(width: AppDimens.space10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'LEXIREAD',
+                            style: AppTextStyles.badge.copyWith(
+                              color: AppColors.primary,
+                              letterSpacing: 1.2,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            'Kalibrasi Aksesibilitas Disleksia',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  TextButton(
+                  TextButton.icon(
                     onPressed: _finishOnboarding,
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.textSecondary,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
-                    child: Text(
+                    icon: const Icon(Icons.skip_next_rounded, size: 18),
+                    label: Text(
                       'Lewati',
-                      style: AppTextStyles.button.copyWith(fontSize: 14),
+                      style: AppTextStyles.button.copyWith(fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Page View 3 Layar Onboarding
+            // Konten 3 Layar Onboarding (Scrollable dan Kaya Konten)
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -195,13 +219,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
 
-            // Bottom Navigation: Indicator Dots & Action Button
+            // Bilah Navigasi Bawah: Indikator Titik Halaman & Tombol Aksi
             Container(
-              padding: const EdgeInsets.all(AppDimens.space20),
+              padding: const EdgeInsets.all(AppDimens.space16),
               decoration: const BoxDecoration(
-                color: AppColors.surface,
+                color: Color(0xFFFAF7EF),
                 border: Border(
-                  top: BorderSide(color: AppColors.border, width: 1.0),
+                  top: BorderSide(color: Color(0xFFDFD7C4), width: 1.5),
                 ),
               ),
               child: Row(
@@ -214,12 +238,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         margin: const EdgeInsets.only(right: 6),
-                        width: isActive ? 24 : 8,
+                        width: isActive ? 26 : 8,
                         height: 8,
                         decoration: BoxDecoration(
                           color: isActive
                               ? AppColors.primary
-                              : AppColors.borderStrong,
+                              : const Color(0xFFC5BDB2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       );
@@ -233,13 +257,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: AppDimens.space24,
+                        horizontal: AppDimens.space20,
                         vertical: AppDimens.space12,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppDimens.radiusL),
                       ),
-                      elevation: 0,
+                      elevation: 1,
                     ),
                     icon: Icon(
                       _currentPage == 2
@@ -255,7 +279,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               : 'Selesai & Mulai Membaca',
                       style: AppTextStyles.button.copyWith(
                         color: Colors.white,
-                        fontSize: 14.5,
+                        fontSize: 14,
                       ),
                     ),
                   ),
@@ -270,9 +294,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   /// 1. Layar Kalibrasi Awal: Penggeser ukuran font, preview kartu teks, tombol Mulai Kalibrasi
   Widget _buildScreen1Calibration() {
+    final previewTextStyle = _sampleFont.getTextStyle(
+      fontSize: _sampleFontSize,
+      height: _sampleLineHeight,
+      letterSpacing: _sampleLetterSpacing,
+      wordSpacing: 2.0,
+      color: const Color(0xFF1E242B),
+    );
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.space20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.space16,
+        vertical: AppDimens.space8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -281,6 +316,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             decoration: BoxDecoration(
               color: AppColors.primaryLight,
               borderRadius: BorderRadius.circular(AppDimens.radiusS),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             ),
             child: Text(
               'LANGKAH 1 DARI 3: KALIBRASI TIPOGRAFI',
@@ -293,26 +329,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: AppDimens.space8),
           Text(
             'Sesuaikan Teks Sesuai Kenyamanan Mata Anda',
-            style: AppTextStyles.headlineMedium.copyWith(fontSize: 22),
+            style: AppTextStyles.headlineMedium.copyWith(
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1E242B),
+            ),
           ),
-          const SizedBox(height: AppDimens.space6),
+          const SizedBox(height: AppDimens.space4),
           Text(
-            'Huruf yang terlalu rapat atau kecil dapat memicu fenomena "huruf berkerumun" (visual crowding). Sesuaikan parameter di bawah:',
-            style: AppTextStyles.bodyMedium,
+            'Huruf yang terlalu rapat atau kecil dapat memicu fenomena "huruf berkerumun" (visual crowding). Sesuaikan parameter berikut agar membaca lebih tenang:',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: const Color(0xFF4A5568),
+            ),
           ),
           const SizedBox(height: AppDimens.space16),
 
-          // PREVIEW KARTU TEKS DINAMIS
+          // PREVIEW KARTU TEKS DINAMIS (Krem Hangat Kontras Tinggi)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(AppDimens.space16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4EEDD), // Latar krem lembut
+              color: const Color(0xFFFFFDF8),
               borderRadius: BorderRadius.circular(AppDimens.radiusL),
-              border: Border.all(color: const Color(0xFFDFD7C4), width: 1.5),
+              border: Border.all(color: const Color(0xFFDFD7C4), width: 1.8),
               boxShadow: const [
                 BoxShadow(
-                  color: AppColors.shadow,
+                  color: Color(0x14000000),
                   blurRadius: 8,
                   offset: Offset(0, 3),
                 ),
@@ -324,37 +366,50 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'PREVIEW TEKS DINAMIS',
-                      style: AppTextStyles.badge.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 10.5,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.visibility_rounded,
+                          size: 16,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'PREVIEW TEKS DINAMIS',
+                          style: AppTextStyles.badge.copyWith(
+                            color: AppColors.primary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '${_sampleFontSize.toStringAsFixed(0)} pt | Spasi ${_sampleLineHeight.toStringAsFixed(1)}x',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textMuted,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4EEDD),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${_sampleFontSize.toStringAsFixed(0)} pt | Spasi ${_sampleLineHeight.toStringAsFixed(1)}x',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: const Color(0xFF1E242B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const Divider(height: 18, color: Color(0xFFDFD7C4)),
-                _sampleFont.getTextStyle(
-                  fontSize: _sampleFontSize,
-                  height: _sampleLineHeight,
-                  letterSpacing: _sampleLetterSpacing,
-                  wordSpacing: 2.0,
-                  color: const Color(0xFF1E242B),
-                ).let((style) => Text(
-                      'Setiap individu memproses teks dengan cara yang unik. '
-                      'Dengan jarak huruf dan baris yang tepat, kata-kata menjadi lebih mudah dikenali tanpa melelahkan mata.',
-                      style: style,
-                    )),
+                Text(
+                  'Setiap individu memproses teks dengan cara yang unik. '
+                  'Dengan jarak huruf dan baris yang tepat, kata-kata menjadi lebih mudah dikenali tanpa melelahkan mata.',
+                  style: previewTextStyle,
+                ),
               ],
             ),
           ),
-          const SizedBox(height: AppDimens.space20),
+          const SizedBox(height: AppDimens.space16),
 
           // SLIDER UKURAN FONT
           _buildControlSlider(
@@ -401,17 +456,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             },
           ),
 
-          // PILIHAN FONT
+          // PILIHAN FONT RAMAH DISLEKSIA
           Text(
             'Karakteristik Huruf:',
-            style: AppTextStyles.titleSmall.copyWith(fontSize: 13),
+            style: AppTextStyles.titleSmall.copyWith(
+              fontSize: 13,
+              color: const Color(0xFF1E242B),
+            ),
           ),
           const SizedBox(height: AppDimens.space8),
           Row(
             children: [
               _buildFontChip(ReaderFontFamily.lexend, 'Lexend (Standar)'),
               const SizedBox(width: AppDimens.space8),
-              _buildFontChip(ReaderFontFamily.openDyslexic, 'OpenDyslexic / Weighted'),
+              _buildFontChip(ReaderFontFamily.openDyslexic, 'OpenDyslexic (Weighted)'),
             ],
           ),
           const SizedBox(height: AppDimens.space24),
@@ -424,7 +482,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget _buildScreen2DualCoding() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.space20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.space16,
+        vertical: AppDimens.space8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -433,6 +494,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             decoration: BoxDecoration(
               color: AppColors.actionUploadBg,
               borderRadius: BorderRadius.circular(AppDimens.radiusS),
+              border: Border.all(color: AppColors.actionUploadBorder),
             ),
             child: Text(
               'LANGKAH 2 DARI 3: DUAL-CODING AUDIO-VISUAL',
@@ -445,23 +507,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: AppDimens.space8),
           Text(
             'Membaca Lebih Cepat dengan Dua Jalur Indra',
-            style: AppTextStyles.headlineMedium.copyWith(fontSize: 22),
+            style: AppTextStyles.headlineMedium.copyWith(
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1E242B),
+            ),
           ),
-          const SizedBox(height: AppDimens.space6),
+          const SizedBox(height: AppDimens.space4),
           Text(
             'Metode Dual-Coding menggabungkan narasi suara (audio) dengan penyorotan kata seketika (visual), membantu otak mengenali pola kata hingga 70% lebih lancar.',
-            style: AppTextStyles.bodyMedium,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: const Color(0xFF4A5568),
+            ),
           ),
-          const SizedBox(height: AppDimens.space20),
+          const SizedBox(height: AppDimens.space16),
 
           // KARTU DEMO MEMBACA DENGAN HIGHLIGHT KATA REAL-TIME
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(AppDimens.space20),
+            padding: const EdgeInsets.all(AppDimens.space16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarm,
+              color: const Color(0xFFFFFDF8),
               borderRadius: BorderRadius.circular(AppDimens.radiusL),
-              border: Border.all(color: AppColors.border, width: 1.5),
+              border: Border.all(color: const Color(0xFFDFD7C4), width: 1.8),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 3),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,7 +557,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                         const SizedBox(width: AppDimens.space6),
                         Text(
-                          _isDemoPlaying ? 'MEMBACAKAN AKTIF' : 'TEKAN PLAY UNTUK DEMO',
+                          _isDemoPlaying ? 'MEMBACAKAN AKTIF' : 'TEKAN PLAY UNTUK MEMULAI',
                           style: AppTextStyles.badge.copyWith(
                             color: _isDemoPlaying
                                 ? AppColors.primary
@@ -494,11 +569,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     Text(
                       '${_demoRate.toStringAsFixed(1)}x kecepatan',
-                      style: AppTextStyles.bodySmall,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
-                const Divider(height: 20, color: AppColors.border),
+                const Divider(height: 18, color: Color(0xFFDFD7C4)),
 
                 // Area Teks Demo dengan Real-Time Highlight Word
                 Wrap(
@@ -533,14 +610,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               : FontWeight.w500,
                           color: isHighlighted
                               ? AppColors.highlightWordText
-                              : AppColors.textPrimary,
+                              : const Color(0xFF1E242B),
                         ),
                       ),
                     );
                   }),
                 ),
 
-                const SizedBox(height: AppDimens.space20),
+                const SizedBox(height: AppDimens.space18),
 
                 // TOMBOL PLAY/PAUSE MENGAMBANG & KONTROL KECEPATAN
                 Row(
@@ -582,7 +659,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         children: [
                           Text(
                             'Kecepatan Suara:',
-                            style: AppTextStyles.bodySmall,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           SliderTheme(
                             data: SliderTheme.of(context).copyWith(
@@ -613,6 +693,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ],
             ),
           ),
+          const SizedBox(height: AppDimens.space16),
+
+          // Poin Manfaat Dual-Coding
+          Container(
+            padding: const EdgeInsets.all(AppDimens.space12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFAF7EF),
+              borderRadius: BorderRadius.circular(AppDimens.radiusM),
+              border: Border.all(color: const Color(0xFFDFD7C4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.psychology_rounded,
+                  color: AppColors.primary,
+                  size: 26,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Dukungan audio-visual mengurangi beban memori kerja otak pembaca dewasa hingga 68%.',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: const Color(0xFF1E242B),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppDimens.space24),
         ],
       ),
@@ -623,7 +733,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget _buildScreen3CameraGuide() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.space20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimens.space16,
+        vertical: AppDimens.space8,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -632,6 +745,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             decoration: BoxDecoration(
               color: AppColors.actionCameraBg,
               borderRadius: BorderRadius.circular(AppDimens.radiusS),
+              border: Border.all(color: AppColors.actionCameraBorder),
             ),
             child: Text(
               'LANGKAH 3 DARI 3: PRESISI PEMINDAIAN OCR',
@@ -644,12 +758,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: AppDimens.space8),
           Text(
             'Panduan Penyelarasan Kamera Dokumen',
-            style: AppTextStyles.headlineMedium.copyWith(fontSize: 22),
+            style: AppTextStyles.headlineMedium.copyWith(
+              fontSize: 21,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1E242B),
+            ),
           ),
-          const SizedBox(height: AppDimens.space6),
+          const SizedBox(height: AppDimens.space4),
           Text(
             'Ekstraksi teks lokal AI bekerja optimal saat kertas berada rata dan sejajar di dalam bingkai panduan kamera.',
-            style: AppTextStyles.bodyMedium,
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: const Color(0xFF4A5568),
+            ),
           ),
           const SizedBox(height: AppDimens.space16),
 
@@ -817,8 +937,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     required IconData icon,
     required ValueChanged<double> onChanged,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppDimens.space12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppDimens.space12),
+      padding: const EdgeInsets.all(AppDimens.space12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF7EF),
+        borderRadius: BorderRadius.circular(AppDimens.radiusM),
+        border: Border.all(color: const Color(0xFFDFD7C4)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -827,20 +953,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             children: [
               Row(
                 children: [
-                  Icon(icon, size: 16, color: AppColors.primary),
-                  const SizedBox(width: AppDimens.space6),
-                  Text(label, style: AppTextStyles.titleSmall.copyWith(fontSize: 13)),
+                  Icon(icon, size: 17, color: AppColors.primary),
+                  const SizedBox(width: AppDimens.space8),
+                  Text(
+                    label,
+                    style: AppTextStyles.titleSmall.copyWith(
+                      fontSize: 13,
+                      color: const Color(0xFF1E242B),
+                    ),
+                  ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(AppDimens.radiusS),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   valueText,
-                  style: AppTextStyles.badge.copyWith(color: AppColors.primary),
+                  style: AppTextStyles.badge.copyWith(
+                    color: AppColors.primary,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
@@ -849,6 +985,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: AppColors.primary,
               thumbColor: AppColors.primary,
+              inactiveTrackColor: const Color(0xFFC5BDB2).withValues(alpha: 0.4),
               trackHeight: 4,
             ),
             child: Slider(
@@ -873,13 +1010,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : AppColors.surfaceWarm,
+            color: isSelected ? AppColors.primary : const Color(0xFFFAF7EF),
             borderRadius: BorderRadius.circular(AppDimens.radiusM),
             border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.border,
-              width: 1.2,
+              color: isSelected ? AppColors.primary : const Color(0xFFDFD7C4),
+              width: 1.5,
             ),
           ),
           alignment: Alignment.center,
@@ -887,7 +1024,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             label,
             style: AppTextStyles.button.copyWith(
               fontSize: 12,
-              color: isSelected ? Colors.white : AppColors.textPrimary,
+              color: isSelected ? Colors.white : const Color(0xFF1E242B),
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
             ),
             textAlign: TextAlign.center,
           ),
@@ -924,17 +1062,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     required String title,
     required String description,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppDimens.space12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppDimens.space10),
+      padding: const EdgeInsets.all(AppDimens.space12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF7EF),
+        borderRadius: BorderRadius.circular(AppDimens.radiusM),
+        border: Border.all(color: const Color(0xFFDFD7C4)),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.surfaceWarm,
-              borderRadius: BorderRadius.circular(AppDimens.radiusM),
-              border: Border.all(color: AppColors.border),
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(AppDimens.radiusS),
             ),
             child: Icon(icon, color: AppColors.primary, size: 20),
           ),
@@ -943,9 +1086,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTextStyles.titleSmall),
+                Text(
+                  title,
+                  style: AppTextStyles.titleSmall.copyWith(
+                    color: const Color(0xFF1E242B),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(description, style: AppTextStyles.bodySmall),
+                Text(
+                  description,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: const Color(0xFF4A5568),
+                  ),
+                ),
               ],
             ),
           ),
@@ -954,8 +1108,3 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 }
-
-extension<T> on T {
-  R let<R>(R Function(T it) block) => block(this);
-}
-
