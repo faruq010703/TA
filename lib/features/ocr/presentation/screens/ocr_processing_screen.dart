@@ -6,7 +6,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../../core/utils/accessibility_utils.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../reader/domain/models/reading_document.dart';
+import '../../../reader/domain/services/pdf_extractor_service.dart';
 import '../../../reader/presentation/controllers/home_controller.dart';
 import '../../../reader/presentation/screens/reader_screen.dart';
 import '../ocr_controller.dart';
@@ -71,9 +73,14 @@ class _OcrProcessingScreenState extends ConsumerState<OcrProcessingScreen>
     try {
       final file = File(widget.imagePath);
       if (await file.exists()) {
-        final result = await ocrService.processImageFromPath(widget.imagePath);
-        if (result.isSuccess && result.text.isNotEmpty) {
-          extractedText = result.text;
+        if (FileUtils.isPdfFile(widget.imagePath)) {
+          final pdfExtractor = ref.read(pdfExtractorServiceProvider);
+          extractedText = await pdfExtractor.extractText(widget.imagePath);
+        } else {
+          final result = await ocrService.processImageFromPath(widget.imagePath);
+          if (result.isSuccess && result.text.isNotEmpty) {
+            extractedText = result.text;
+          }
         }
       }
     } catch (_) {}

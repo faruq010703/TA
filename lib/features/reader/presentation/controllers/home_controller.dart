@@ -9,6 +9,7 @@ import '../../../ocr/presentation/ocr_controller.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
 import '../../data/repositories/reading_history_repository.dart';
 import '../../domain/models/reading_document.dart';
+import '../../domain/services/pdf_extractor_service.dart';
 import '../../domain/services/tts_service.dart';
 
 /// Provider repositori riwayat bacaan
@@ -264,11 +265,13 @@ class HomeNotifier extends Notifier<HomeState> {
         final file = File(filePath);
         extractedText = await file.readAsString();
       } else if (FileUtils.isPdfFile(filePath)) {
-        // Pada berkas PDF, bila teks langsung tidak dapat dibaca, siapkan dokumen pembaca
-        extractedText =
-            'Dokumen: $fileName\n\n'
-            'Teks dokumen PDF telah disiapkan untuk dibacakan secara berurutan. '
-            'Gunakan tombol suara di bagian bawah untuk mendengarkan isi dokumen ini.';
+        state = state.copyWith(
+          loadingTitle: 'Mengekstrak Dokumen PDF...',
+          loadingSubtitle:
+              'Membaca seluruh halaman dokumen secara menyeluruh...',
+        );
+        final pdfExtractor = ref.read(pdfExtractorServiceProvider);
+        extractedText = await pdfExtractor.extractText(filePath);
       } else {
         extractedText = 'Isi berkas dari: $fileName';
       }

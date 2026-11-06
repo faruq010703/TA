@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 import 'package:lexiread/features/ocr/data/ocr_service.dart';
 import 'package:lexiread/features/ocr/presentation/screens/ocr_preprocessing_screen.dart';
 import 'package:lexiread/features/ocr/presentation/screens/ocr_result_screen.dart';
 import 'package:lexiread/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:lexiread/features/reader/domain/models/reading_document.dart';
+import 'package:lexiread/features/reader/domain/services/pdf_extractor_service.dart';
 import 'package:lexiread/features/reader/domain/services/syllable_service.dart';
 import 'package:lexiread/features/reader/domain/services/text_rank_summarizer.dart';
 import 'package:lexiread/features/reader/domain/services/tts_service.dart';
@@ -309,5 +312,49 @@ void main() {
     expect(find.byTooltip('Hentikan'), findsOneWidget);
     expect(find.byTooltip('Mundur 5 Detik'), findsOneWidget);
     expect(find.byTooltip('Maju 5 Detik'), findsOneWidget);
+  });
+
+  test('PdfExtractorService mengekstrak teks seluruh halaman dokumen PDF multi-halaman', () async {
+    final pdfDoc = syncfusion.PdfDocument();
+
+    // Halaman 1
+    final page1 = pdfDoc.pages.add();
+    page1.graphics.drawString(
+      'Halaman Pertama: Pendahuluan dan Latar Belakang Masalah Disleksia Dewasa dalam Membaca Teks Ilmiah yang Panjang dan Rumit.',
+      syncfusion.PdfStandardFont(syncfusion.PdfFontFamily.helvetica, 12),
+    );
+
+    // Halaman 2
+    final page2 = pdfDoc.pages.add();
+    page2.graphics.drawString(
+      'Halaman Kedua: Metode Penelitian dan Eksperimen Tipografi Adaptif dengan Spasi Baris Lebar serta Sinkronisasi Audio Visual.',
+      syncfusion.PdfStandardFont(syncfusion.PdfFontFamily.helvetica, 12),
+    );
+
+    final bytes = await pdfDoc.save();
+    pdfDoc.dispose();
+
+    final tempFile = File(
+      '${Directory.systemTemp.path}/test_multipage_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+    await tempFile.writeAsBytes(bytes);
+
+    try {
+      final extractorService = PdfExtractorService();
+      final extracted = await extractorService.extractText(tempFile.path);
+
+      // Verifikasi teks dari kedua halaman diekstrak secara utuh
+      expect(extracted.contains('Halaman Pertama'), isTrue);
+      expect(extracted.contains('Pendahuluan dan Latar Belakang'), isTrue);
+      expect(extracted.contains('Halaman Kedua'), isTrue);
+      expect(extracted.contains('Metode Penelitian dan Eksperimen'), isTrue);
+
+      // Verifikasi jumlah teks memadai dan utuh
+      expect(extracted.length > 100, isTrue);
+    } finally {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    }
   });
 }
