@@ -6,14 +6,11 @@ import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
+import '../../../settings/presentation/screens/appearance_settings_screen.dart';
 import '../../domain/models/reading_document.dart';
-import '../../domain/services/syllable_service.dart';
 import '../../domain/services/tts_service.dart';
 import '../controllers/home_controller.dart';
-import '../widgets/advanced_audio_sheet.dart';
-import '../widgets/reading_progress_bar.dart';
 import '../widgets/syllable_dialog.dart';
-import '../widgets/typography_sheet.dart';
 import 'summary_screen.dart';
 
 /// Struktur blok paragraf untuk pemetaan penyorotan kata dan auto-scrolling
@@ -31,10 +28,16 @@ class _ParagraphBlock {
   });
 }
 
-/// Layar pembaca teks adaptif ramah disleksia dewasa:
-/// Menampilkan teks dengan tipografi adaptif, fitur penyorotan kata Read-Along real-time,
-/// pemenggalan fonik suku kata berwarna bergantian, floating control bar audio,
-/// dan penggaris fokus baca interaktif (reading ruler).
+/// Layar Baca Adaptif (ReaderScreen - Sesuai screen.png):
+/// Fitur:
+/// - Header: "← Kembali", Judul dokumen, ikon buku, ikon tipografi "TT"
+/// - Sub-header: Chip halaman ("Halaman 1 dari 4") & chip estimasi waktu baca
+/// - Tombol Pill: "💡 Buka Ringkasan Cepat (AI)"
+/// - Teks Bacaan: Font Lexend/OpenDyslexic, jarak baris 1.8x, penanda garis biru di kiri paragraf aktif
+/// - Fitur Read-Along: Highlight kata berwarna kuning pastel sinkron dengan kata TTS secara real-time
+/// - Interaksi Kata Sulit: Kata bergaris bawah putus-putus bisa diklik untuk memunculkan tooltip pemenggalan suku kata
+/// - Floating Audio Bar: Slider durasi (01:42 / 04:20), tombol -5s, Play/Pause bundar biru, +5s, dan tombol pengatur kecepatan (0.75x, 1.0x, 1.25x)
+/// - Kartu "Catatan Pendukung (Dual-Coding)" di bawah teks
 class ReaderScreen extends ConsumerStatefulWidget {
   final ReadingDocument document;
 
@@ -59,9 +62,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   TtsWordHighlight _currentHighlight = TtsWordHighlight.empty;
   final Map<int, GlobalKey> _paragraphKeys = {};
   List<_ParagraphBlock> _paragraphs = [];
-
-  double _rulerOffsetY = 240.0;
-  bool _isRulerEnabled = false;
   int _lastAutoScrolledParagraph = -1;
 
   @override
@@ -194,7 +194,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           if (key?.currentContext != null) {
             Scrollable.ensureVisible(
               key!.currentContext!,
-              alignment: 0.32,
+              alignment: 0.28,
               duration: const Duration(milliseconds: 320),
               curve: Curves.easeInOutCubic,
             );
@@ -241,12 +241,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
-  void _openTypographySheet() {
-    TypographySheet.show(context);
-  }
-
-  void _openAdvancedAudioSheet() {
-    AdvancedAudioSheet.show(context, ttsService: _ttsService);
+  void _openAppearanceSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AppearanceSettingsScreen(),
+      ),
+    );
   }
 
   void _openSummaryScreen() {
@@ -261,11 +262,52 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  bool _isDifficultWord(String word) {
+    final clean = word.toLowerCase();
+    if (clean.length >= 7) return true;
+    const difficultWords = {
+      'metakognitif',
+      'metakognisi',
+      'pembelajaran',
+      'mempertahankan',
+      'perkembangan',
+      'karakteristik',
+      'konvensional',
+      'penelitian',
+      'keterampilan',
+      'kesadaran',
+      'pendekatan',
+      'signifikan',
+      'ekstraksi',
+      'aksesibilitas',
+      'disleksia',
+      'pemahaman',
+    };
+    return difficultWords.contains(clean);
+  }
+
+  String _formatReadingTime(int wordCount) {
+    final minutes = (wordCount / 120).ceil().clamp(1, 60);
+    return '⏱ $minutes Menit Baca';
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsControllerProvider);
     final theme = settings.colorTheme;
-    final isRulerVisible = settings.showReadingRuler && _isRulerEnabled;
+
+    // Hitung posisi durasi saat ini
+    final currentWords = _currentHighlight.wordIndex >= 0
+        ? _currentHighlight.wordIndex
+        : _currentDoc.currentWordIndex;
+    final totalWords = _currentDoc.totalWords > 0 ? _currentDoc.totalWords : 100;
+    final totalSeconds = (totalWords * 0.5).round();
+    final elapsedSeconds = (currentWords * 0.5).round().clamp(0, totalSeconds);
+
+    final elapsedMinStr = (elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+    final elapsedSecStr = (elapsedSeconds % 60).toString().padLeft(2, '0');
+    final totalMinStr = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final totalSecStr = (totalSeconds % 60).toString().padLeft(2, '0');
 
     return Scaffold(
       backgroundColor: theme.backgroundColor,
@@ -274,59 +316,34 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         foregroundColor: theme.textColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, size: 28),
+          icon: const Icon(Icons.arrow_back_rounded, size: 26),
           tooltip: 'Kembali ke Beranda',
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              _currentDoc.title,
-              style: AppTextStyles.titleMedium.copyWith(
-                fontWeight: FontWeight.w700,
-                color: theme.textColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            const Icon(
+              Icons.auto_stories_rounded,
+              size: 20,
+              color: AppColors.primary,
             ),
-            Text(
-              '${(_currentDoc.progressRatio * 100).toStringAsFixed(0)}% telah dibaca',
-              style: AppTextStyles.bodySmall.copyWith(
-                fontSize: 11,
-                color: theme.textColor.withValues(alpha: 0.7),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _currentDoc.title,
+                style: AppTextStyles.titleMedium.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: theme.textColor,
+                  fontSize: 15,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
         actions: [
-          // Tombol Ringkas Dokumen (TextRank)
-          TextButton.icon(
-            onPressed: _openSummaryScreen,
-            icon: const Icon(
-              Icons.auto_stories_rounded,
-              size: 17,
-              color: AppColors.actionUploadIcon,
-            ),
-            label: Text(
-              'Ringkas',
-              style: AppTextStyles.badge.copyWith(
-                fontSize: 12,
-                color: AppColors.actionUploadIcon,
-              ),
-            ),
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.actionUploadIconBg,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppDimens.radiusM),
-                side: const BorderSide(color: AppColors.actionUploadBorder),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-
-          // Tombol Setelan Tipografi (Aa)
+          // Ikon Tipografi "TT"
           IconButton(
             icon: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
@@ -336,306 +353,454 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 border: Border.all(color: theme.borderColor),
               ),
               child: Text(
-                'Aa',
+                'TT',
                 style: AppTextStyles.badge.copyWith(
                   color: theme.textColor,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-            tooltip: 'Pengaturan Tipografi (Aa)',
-            onPressed: _openTypographySheet,
-          ),
-
-          // Tombol Audio Lanjutan (Equalizer)
-          IconButton(
-            icon: Icon(
-              Icons.tune_rounded,
-              size: 22,
-              color: theme.textColor,
-            ),
-            tooltip: 'Setelan Audio Lanjutan',
-            onPressed: _openAdvancedAudioSheet,
+            tooltip: 'Pengaturan Tampilan Baca (TT)',
+            onPressed: _openAppearanceSettings,
           ),
           const SizedBox(width: AppDimens.space8),
         ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(16.0),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppDimens.space20),
-            child: ReadingProgressBar(
-              ratio: _currentDoc.progressRatio,
-              currentWords: _currentDoc.currentWordIndex,
-              totalWords: _currentDoc.totalWords,
-              showLabel: false,
-            ),
-          ),
-        ),
       ),
       body: Stack(
         children: [
-          // KONTEN TEKS HASIL EKSTRAKSI ADAPTIF
           SingleChildScrollView(
             controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.only(
               left: AppDimens.space16,
               right: AppDimens.space16,
-              top: AppDimens.space20,
-              bottom: 160.0,
+              top: AppDimens.space12,
+              bottom: 180.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // SUB-HEADER: Chip Halaman & Chip Estimasi Waktu Baca
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.surfaceColor,
+                            borderRadius:
+                                BorderRadius.circular(AppDimens.radiusS),
+                            border: Border.all(color: theme.borderColor),
+                          ),
+                          child: Text(
+                            'Halaman 1 dari 4',
+                            style: AppTextStyles.badge.copyWith(
+                              color: theme.textColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.surfaceColor,
+                            borderRadius:
+                                BorderRadius.circular(AppDimens.radiusS),
+                            border: Border.all(color: theme.borderColor),
+                          ),
+                          child: Text(
+                            _formatReadingTime(_currentDoc.totalWords),
+                            style: AppTextStyles.badge.copyWith(
+                              color: theme.textColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // TOMBOL PILL: "💡 Buka Ringkasan Cepat (AI)"
+                    TextButton.icon(
+                      onPressed: _openSummaryScreen,
+                      icon: const Icon(
+                        Icons.lightbulb_rounded,
+                        size: 16,
+                        color: Color(0xFFD97706),
+                      ),
+                      label: Text(
+                        'Ringkasan Cepat (AI)',
+                        style: AppTextStyles.badge.copyWith(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF92400E),
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        backgroundColor: const Color(0xFFFFF9E8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusL),
+                          side: const BorderSide(color: Color(0xFFE8DCC2)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: AppDimens.space16),
+
+                // DAFTAR PARAGRAF BACAAN ADAPTIF
                 ..._paragraphs.map((block) {
                   final isEven = block.index.isEven;
                   final isShaded = settings.enableLineShading && !isEven;
 
+                  // Penanda garis biru di kiri paragraf aktif yang sedang dibacakan
+                  final isParagraphActive = _currentHighlight.isActive &&
+                      _currentHighlight.charStart >= block.globalCharStart &&
+                      _currentHighlight.charStart < block.globalCharEnd;
+
                   return Container(
                     key: _paragraphKeys[block.index],
                     margin: const EdgeInsets.only(bottom: 12.0),
-                    padding: EdgeInsets.symmetric(
-                      horizontal: settings.enableLineShading ? 14.0 : 4.0,
-                      vertical: settings.enableLineShading ? 10.0 : 4.0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14.0,
+                      vertical: 10.0,
                     ),
                     decoration: BoxDecoration(
                       color: isShaded ? theme.shadingColor : Colors.transparent,
                       borderRadius: BorderRadius.circular(AppDimens.radiusM),
-                      border: isShaded
-                          ? Border.all(
-                              color: theme.borderColor.withValues(alpha: 0.7),
-                              width: 1.0,
-                            )
-                          : null,
+                      border: Border(
+                        left: BorderSide(
+                          color: isParagraphActive
+                              ? const Color(0xFF2563EB) // Garis biru penanda aktif
+                              : (isShaded
+                                  ? theme.borderColor.withValues(alpha: 0.6)
+                                  : Colors.transparent),
+                          width: isParagraphActive ? 3.5 : 1.0,
+                        ),
+                        top: BorderSide(
+                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                        ),
+                        right: BorderSide(
+                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                        ),
+                        bottom: BorderSide(
+                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                        ),
+                      ),
                     ),
-                    child: _buildParagraphText(block, settings, theme),
+                    child: _buildParagraphText(
+                      block: block,
+                      settings: settings,
+                      theme: theme,
+                    ),
                   );
                 }),
+
+                const SizedBox(height: AppDimens.space20),
+
+                // KARTU "CATATAN PENDUKUNG (DUAL-CODING)" DI BAWAH TEKS
+                Container(
+                  padding: const EdgeInsets.all(AppDimens.space16),
+                  decoration: BoxDecoration(
+                    color: theme.isDark
+                        ? const Color(0xFF262626)
+                        : const Color(0xFFFAF7EF),
+                    borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                    border: Border.all(color: theme.borderColor, width: 1.2),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEBF5FB),
+                          borderRadius:
+                              BorderRadius.circular(AppDimens.radiusS),
+                        ),
+                        child: const Icon(
+                          Icons.psychology_rounded,
+                          color: Color(0xFF2563EB),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Catatan Pendukung (Dual-Coding)',
+                              style: AppTextStyles.titleSmall.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.textColor,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Dual-Coding mengaktifkan jalur visual dan auditori otak secara serentak untuk memudahkan pemahaman makna kalimat yang kompleks tanpa kelelahan kognitif.',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: theme.textColor.withValues(alpha: 0.8),
+                                fontSize: 12,
+                                height: 1.45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
 
-          // PENGGARIS BACA INTERAKTIF YANG DAPAT DIGESER (Interactive Reading Ruler)
-          if (isRulerVisible)
-            Positioned(
-              top: _rulerOffsetY,
-              left: 0,
-              right: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onVerticalDragUpdate: (details) {
-                  setState(() {
-                    _rulerOffsetY = (_rulerOffsetY + details.delta.dy)
-                        .clamp(60.0, MediaQuery.of(context).size.height - 220.0);
-                  });
-                },
-                child: Container(
-                  height: 48.0,
-                  decoration: BoxDecoration(
-                    color: AppColors.actionCameraIconBg.withValues(alpha: 0.38),
-                    border: const Border.symmetric(
-                      horizontal: BorderSide(
-                        color: AppColors.actionCameraBorder,
-                        width: 2.0,
-                      ),
-                    ),
+          // FLOATING AUDIO BAR DI BAGIAN BAWAH (Sesuai screen.png)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimens.space16,
+                vertical: AppDimens.space10,
+              ),
+              decoration: BoxDecoration(
+                color: theme.surfaceColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppDimens.radiusXL),
+                ),
+                border: Border.all(color: theme.borderColor, width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x1A000000),
+                    blurRadius: 12,
+                    offset: Offset(0, -3),
                   ),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.surfaceColor.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppColors.actionCameraBorder),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.drag_indicator_rounded,
-                            size: 14,
-                            color: AppColors.actionCameraIcon,
+                ],
+              ),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Slider Durasi (01:42 / 04:20)
+                    Row(
+                      children: [
+                        Text(
+                          '$elapsedMinStr:$elapsedSecStr',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: theme.textColor,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Penggaris Baca',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.actionCameraIcon,
+                        ),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              activeTrackColor: const Color(0xFF2563EB),
+                              inactiveTrackColor:
+                                  theme.textColor.withValues(alpha: 0.15),
+                              thumbColor: const Color(0xFF2563EB),
+                              trackHeight: 3.5,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                            ),
+                            child: Slider(
+                              value: elapsedSeconds
+                                  .toDouble()
+                                  .clamp(0.0, totalSeconds.toDouble()),
+                              min: 0.0,
+                              max: totalSeconds > 0
+                                  ? totalSeconds.toDouble()
+                                  : 100.0,
+                              onChanged: (val) {
+                                final charRatio = val / totalSeconds;
+                                final charTarget = (charRatio *
+                                        _currentDoc.content.length)
+                                    .round();
+                                _ttsService.speak(
+                                  _currentDoc.content,
+                                  fromCharIndex: charTarget,
+                                );
+                              },
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        Text(
+                          '$totalMinStr:$totalSecStr',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: theme.textColor,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+
+                    // Baris Tombol Kontrol: -5s, Play/Pause Bulat Biru, +5s, dan Kecepatan
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Tombol Pengatur Kecepatan (0.75x, 1.0x, 1.25x)
+                        PopupMenuButton<double>(
+                          initialValue: settings.speechRate,
+                          onSelected: (val) {
+                            ref
+                                .read(settingsControllerProvider.notifier)
+                                .updateSpeechRate(val);
+                            _ttsService.setSpeechRate(val);
+                          },
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppDimens.radiusM),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.shadingColor,
+                              borderRadius:
+                                  BorderRadius.circular(AppDimens.radiusM),
+                              border: Border.all(color: theme.borderColor),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${settings.speechRate.toStringAsFixed(2)}x',
+                                  style: AppTextStyles.badge.copyWith(
+                                    color: theme.textColor,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.arrow_drop_down_rounded,
+                                  size: 18,
+                                  color: theme.textColor,
+                                ),
+                              ],
+                            ),
+                          ),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 0.75,
+                              child: Text('0.75x (Santai)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 1.0,
+                              child: Text('1.00x (Normal)'),
+                            ),
+                            const PopupMenuItem(
+                              value: 1.25,
+                              child: Text('1.25x (Tangkas)'),
+                            ),
+                          ],
+                        ),
+
+                        // Tombol Kontrol Tengah: -5s, Play/Pause Bulat Biru, +5s
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Tombol -5 detik
+                            IconButton(
+                              onPressed: () => _ttsService.jumpOffset(-30),
+                              icon: const Icon(Icons.replay_5_rounded, size: 28),
+                              color: theme.textColor,
+                              tooltip: 'Mundur 5 Detik',
+                            ),
+                            const SizedBox(width: 10),
+
+                            // Tombol Play / Pause Bundar Biru
+                            GestureDetector(
+                              onTap: _ttsState != TtsPlaybackState.playing
+                                  ? _playTts
+                                  : _pauseTts,
+                              child: Container(
+                                width: 52,
+                                height: 52,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF2563EB),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0x332563EB),
+                                      blurRadius: 10,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  _ttsState == TtsPlaybackState.playing
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+
+                            // Tombol +5 detik
+                            IconButton(
+                              onPressed: () => _ttsService.jumpOffset(30),
+                              icon: const Icon(Icons.forward_5_rounded, size: 28),
+                              color: theme.textColor,
+                              tooltip: 'Maju 5 Detik',
+                            ),
+                          ],
+                        ),
+
+                        // Tombol Hentikan Audio
+                        IconButton(
+                          onPressed: _ttsState != TtsPlaybackState.stopped
+                              ? _stopTts
+                              : null,
+                          icon: const Icon(Icons.stop_circle_outlined, size: 28),
+                          color: AppColors.error,
+                          tooltip: 'Hentikan',
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
+          ),
         ],
-      ),
-
-      // FLOATING CONTROL BAR AUDIO DI BAGIAN BAWAH
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimens.space16,
-          vertical: AppDimens.space12,
-        ),
-        decoration: BoxDecoration(
-          color: theme.surfaceColor,
-          border: Border(
-            top: BorderSide(
-              color: theme.borderColor,
-              width: AppDimens.borderWidthStandard,
-            ),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 10,
-              offset: Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Slider Kecepatan Membaca (0.5x - 1.5x) & Ruler Toggle
-              Row(
-                children: [
-                  // Toggle Ruler Icon
-                  IconButton(
-                    icon: Icon(
-                      _isRulerEnabled
-                          ? Icons.view_headline_rounded
-                          : Icons.view_headline_outlined,
-                      color: _isRulerEnabled
-                          ? AppColors.primary
-                          : theme.textColor.withValues(alpha: 0.6),
-                      size: 20,
-                    ),
-                    tooltip: 'Toggle Penggaris Baca',
-                    onPressed: () {
-                      setState(() {
-                        _isRulerEnabled = !_isRulerEnabled;
-                      });
-                    },
-                  ),
-                  Text(
-                    '${settings.speechRate.toStringAsFixed(1)}x',
-                    style: AppTextStyles.badge.copyWith(
-                      color: theme.textColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: AppColors.primary,
-                        inactiveTrackColor: theme.textColor.withValues(alpha: 0.15),
-                        thumbColor: AppColors.primary,
-                        trackHeight: 3,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
-                        ),
-                      ),
-                      child: Slider(
-                        value: settings.speechRate,
-                        min: 0.5,
-                        max: 1.5,
-                        divisions: 10,
-                        onChanged: (val) {
-                          ref
-                              .read(settingsControllerProvider.notifier)
-                              .updateSpeechRate(val);
-                          _ttsService.setSpeechRate(val);
-                        },
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.stop_rounded, size: 24),
-                    color: AppColors.error,
-                    tooltip: 'Hentikan Audio',
-                    onPressed: _ttsState != TtsPlaybackState.stopped ? _stopTts : null,
-                  ),
-                ],
-              ),
-
-              // Baris Kontrol Audio: Lompat -10s, Play/Pause, Lompat +10s
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Lompat Mundur -10s / 60 Karakter
-                  IconButton(
-                    onPressed: () => _ttsService.jumpOffset(-60),
-                    icon: const Icon(Icons.replay_10_rounded, size: 28),
-                    color: theme.textColor,
-                    tooltip: 'Mundur 10 Detik / Kalimat Sebelumnya',
-                  ),
-                  const SizedBox(width: AppDimens.space16),
-
-                  // Tombol Play / Pause Utama
-                  ElevatedButton.icon(
-                    onPressed: _ttsState != TtsPlaybackState.playing
-                        ? _playTts
-                        : _pauseTts,
-                    icon: Icon(
-                      _ttsState == TtsPlaybackState.playing
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      size: 26,
-                    ),
-                    label: Text(
-                      _ttsState == TtsPlaybackState.playing
-                          ? 'Jeda'
-                          : (_ttsState == TtsPlaybackState.paused
-                              ? 'Lanjutkan'
-                              : 'Bacakan'),
-                      style: AppTextStyles.button.copyWith(fontSize: 15),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(130.0, 48),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppDimens.space16),
-
-                  // Lompat Maju +10s / 60 Karakter
-                  IconButton(
-                    onPressed: () => _ttsService.jumpOffset(60),
-                    icon: const Icon(Icons.forward_10_rounded, size: 28),
-                    color: theme.textColor,
-                    tooltip: 'Maju 10 Detik / Kalimat Berikutnya',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
 
-  /// Membangun teks paragraf dengan opsi pewarnaan suku kata fonik
-  /// dan penyorotan kata aktif real-time (Read-Along TTS)
-  Widget _buildParagraphText(
-    _ParagraphBlock block,
-    ReaderSettings settings,
-    ReaderColorTheme theme,
-  ) {
+  /// Membangun teks paragraf dengan penyorotan kata Read-Along real-time
+  /// dan interaksi garis putus-putus pada kata majemuk / sulit
+  Widget _buildParagraphText({
+    required _ParagraphBlock block,
+    required ReaderSettings settings,
+    required ReaderColorTheme theme,
+  }) {
     final baseStyle = settings.fontFamily.getTextStyle(
       fontSize: settings.fontSize,
       height: settings.lineSpacing,
@@ -650,7 +815,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     return Wrap(
       spacing: 6.0,
-      runSpacing: 4.0,
+      runSpacing: 5.0,
       children: words.map((rawWord) {
         final cleanWord = rawWord.replaceAll(RegExp(r'[^\w]'), '');
         final wordStart = block.text.indexOf(
@@ -659,8 +824,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         final wordEnd = wordStart + rawWord.length;
         runningCharOffset = wordEnd;
 
-        // Periksa apakah kata ini sedang dibacakan secara real-time
-        final isHighlighted = _currentHighlight.isActive &&
+        // Cek penyorotan kata aktif TTS (Read-Along)
+        final isHighlighted = settings.syncWordHighlight &&
+            _currentHighlight.isActive &&
             ((_currentHighlight.charStart >= wordStart &&
                     _currentHighlight.charStart < wordEnd) ||
                 (_currentHighlight.word.toLowerCase() ==
@@ -668,6 +834,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     cleanWord.isNotEmpty &&
                     _currentHighlight.charStart >= block.globalCharStart &&
                     _currentHighlight.charStart < block.globalCharEnd));
+
+        final isDifficult =
+            settings.autoSyllableSplit && _isDifficultWord(cleanWord);
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -687,7 +856,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
             decoration: isHighlighted
                 ? BoxDecoration(
-                    color: AppColors.highlightWord, // Kuning pastel lembut #FFF3A8
+                    color: AppColors.highlightWord, // Kuning pastel #FFF3A8
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                       color: AppColors.highlightWordBorder,
@@ -695,69 +864,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     ),
                   )
                 : null,
-            child: _buildWordContent(
-              rawWord: rawWord,
-              cleanWord: cleanWord,
-              baseStyle: baseStyle,
-              isHighlighted: isHighlighted,
-              settings: settings,
-              theme: theme,
+            child: Text(
+              rawWord,
+              style: isHighlighted
+                  ? baseStyle.copyWith(
+                      color: AppColors.highlightWordText,
+                      fontWeight: FontWeight.w800,
+                    )
+                  : (isDifficult
+                      ? baseStyle.copyWith(
+                          color: theme.textColor,
+                          decoration: TextDecoration.underline,
+                          decorationStyle: TextDecorationStyle.dashed,
+                          decorationColor: const Color(0xFF2563EB),
+                          decorationThickness: 1.8,
+                        )
+                      : baseStyle.copyWith(color: theme.textColor)),
             ),
           ),
         );
       }).toList(),
-    );
-  }
-
-  /// Membangun kata dengan pewarnaan suku kata fonik alternatif (contoh: me-to-do-lo-gi)
-  Widget _buildWordContent({
-    required String rawWord,
-    required String cleanWord,
-    required TextStyle baseStyle,
-    required bool isHighlighted,
-    required ReaderSettings settings,
-    required ReaderColorTheme theme,
-  }) {
-    if (isHighlighted) {
-      return Text(
-        rawWord,
-        style: baseStyle.copyWith(
-          color: AppColors.highlightWordText,
-          fontWeight: FontWeight.w700,
-        ),
-      );
-    }
-
-    // Pewarnaan suku kata berselang warna jika opsi fonik diaktifkan
-    if (settings.phonicSyllableColoring && cleanWord.length > 2) {
-      final syllables = SyllableService.syllabify(cleanWord);
-      if (syllables.length > 1) {
-        return RichText(
-          text: TextSpan(
-            children: List.generate(syllables.length, (idx) {
-              final color = idx.isEven
-                  ? (theme.isDark
-                      ? const Color(0xFF93C5FD)
-                      : AppColors.phonicPrimary)
-                  : (theme.isDark
-                      ? const Color(0xFFC084FC)
-                      : AppColors.phonicSecondary);
-              return TextSpan(
-                text: syllables[idx],
-                style: baseStyle.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-              );
-            }),
-          ),
-        );
-      }
-    }
-
-    return Text(
-      rawWord,
-      style: baseStyle.copyWith(color: theme.textColor),
     );
   }
 }

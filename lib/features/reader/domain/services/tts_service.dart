@@ -1,8 +1,44 @@
 import 'dart:async';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Status status pembacaan Text-to-Speech
+/// Status pembacaan Text-to-Speech
 enum TtsPlaybackState { stopped, playing, paused }
+
+/// Model profil suara alami (Human-Like Voice Profile)
+class TtsVoiceProfile {
+  final String id;
+  final String name;
+  final String description;
+  final double pitch;
+  final double speechRate;
+  final String gender;
+  final Map<String, String>? nativeVoice;
+
+  const TtsVoiceProfile({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.pitch,
+    required this.speechRate,
+    required this.gender,
+    this.nativeVoice,
+  });
+
+  TtsVoiceProfile copyWith({
+    Map<String, String>? nativeVoice,
+  }) {
+    return TtsVoiceProfile(
+      id: id,
+      name: name,
+      description: description,
+      pitch: pitch,
+      speechRate: speechRate,
+      gender: gender,
+      nativeVoice: nativeVoice ?? this.nativeVoice,
+    );
+  }
+}
 
 /// Model data untuk penyorotan kata yang sedang dibacakan secara real-time
 class TtsWordHighlight {
@@ -32,14 +68,54 @@ class TtsWordHighlight {
       'TtsWordHighlight(word: "$word", range: $charStart-$charEnd, index: $wordIndex)';
 }
 
-/// Layanan Text-to-Speech (TTS) yang dioptimalkan untuk bahasa Indonesia ('id-ID')
-/// dan penyorotan kata real-time (Read-Along) ramah disleksia.
+/// Layanan Text-to-Speech (TTS) Multi-Voice yang dioptimalkan untuk bahasa Indonesia ('id-ID')
+/// dengan profil suara alami (Bima, Dian, Laras, Default Sistem) dan penyorotan kata real-time.
 class TtsService {
+  static const String _voicePrefKey = 'lexiread_selected_voice_profile';
+
   final FlutterTts _flutterTts = FlutterTts();
   TtsPlaybackState _playbackState = TtsPlaybackState.stopped;
-  double _speechRate = 0.48; // Kecepatan baca santai (0.3 - 1.0)
+  double _speechRate = 0.85;
+  double _pitch = 1.0;
   String _currentText = '';
   int _lastPausedCharIndex = 0;
+  String _selectedProfileName = 'Bima - Pria Tenang';
+
+  // Daftar 4 profil suara alami bawaan
+  List<TtsVoiceProfile> _voiceProfiles = [
+    const TtsVoiceProfile(
+      id: 'bima',
+      name: 'Bima - Pria Tenang',
+      description: 'Suara pria tenang, vokal hangat, tempo relaksasi membaca',
+      pitch: 0.95,
+      speechRate: 0.85,
+      gender: 'Pria',
+    ),
+    const TtsVoiceProfile(
+      id: 'dian',
+      name: 'Dian - Wanita Alami',
+      description: 'Suara wanita natural, artikulasi jernih, intonasi ramah',
+      pitch: 1.0,
+      speechRate: 0.90,
+      gender: 'Wanita',
+    ),
+    const TtsVoiceProfile(
+      id: 'laras',
+      name: 'Laras - Cepat & Artikulatif',
+      description: 'Suara wanita cerah, tempo tangkas, fokus efisiensi baca',
+      pitch: 1.05,
+      speechRate: 1.05,
+      gender: 'Wanita',
+    ),
+    const TtsVoiceProfile(
+      id: 'system',
+      name: 'Default Sistem',
+      description: 'Profil netral engine bawaan gawai',
+      pitch: 1.0,
+      speechRate: 0.95,
+      gender: 'Netral',
+    ),
+  ];
 
   final _stateController = StreamController<TtsPlaybackState>.broadcast();
   Stream<TtsPlaybackState> get stateStream => _stateController.stream;
@@ -52,8 +128,11 @@ class TtsService {
 
   TtsPlaybackState get playbackState => _playbackState;
   double get speechRate => _speechRate;
+  double get pitch => _pitch;
   String get currentText => _currentText;
   int get lastPausedCharIndex => _lastPausedCharIndex;
+  List<TtsVoiceProfile> get voiceProfiles => _voiceProfiles;
+  String get selectedProfileName => _selectedProfileName;
 
   Future<void> initialize() async {
     try {
@@ -66,12 +145,59 @@ class TtsService {
         } catch (_) {}
       }
 
-      // 2. Kecepatan bicara (0.3x - 1.0x), volume penuh, nada bicara normal
-      await _flutterTts.setSpeechRate(_speechRate);
-      await _flutterTts.setVolume(1.0);
-      await _flutterTts.setPitch(1.0);
+      // 2. Deteksi voice engine bawaan sistem dan filter bahasa Indonesia
+      try {
+        final dynamic rawVoices = await _flutterTts.getVoices;
+        if (rawVoices is List) {
+          final indonesianVoices = <Map<String, String>>[];
+          for (final item in rawVoices) {
+            if (item is Map) {
+              final locale = (item['locale'] ?? item['language'] ?? '').toString();
+              if (locale.toLowerCase().contains('id')) {
+                indonesianVoices.add({
+                  'name': item['name']?.toString() ?? '',
+                  'locale': locale,
+                });
+              }
+            }
+          }
 
-      // 3. Handler Siklus Pemutaran Audio
+          // Pasangkan ke profil jika suara native id-ID tersedia
+          if (indonesianVoices.isNotEmpty) {
+            final maleVoice = indonesianVoices.firstWhere(
+              (v) => v['name']!.toLowerCase().contains('male') ||
+                  v['name']!.toLowerCase().contains('bima'),
+              orElse: () => indonesianVoices.first,
+            );
+            final femaleVoice = indonesianVoices.firstWhere(
+              (v) => v['name']!.toLowerCase().contains('female') ||
+                  v['name']!.toLowerCase().contains('dian'),
+              orElse: () => indonesianVoices.last,
+            );
+
+            _voiceProfiles = [
+              _voiceProfiles[0].copyWith(nativeVoice: maleVoice),
+              _voiceProfiles[1].copyWith(nativeVoice: femaleVoice),
+              _voiceProfiles[2].copyWith(nativeVoice: femaleVoice),
+              _voiceProfiles[3],
+            ];
+          }
+        }
+      } catch (_) {}
+
+      // 3. Muat preferensi profil suara yang tersimpan
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final savedProfile = prefs.getString(_voicePrefKey);
+        if (savedProfile != null && savedProfile.isNotEmpty) {
+          _selectedProfileName = savedProfile;
+        }
+      } catch (_) {}
+
+      // Terapkan profil aktif
+      await applyVoiceProfile(_selectedProfileName, saveToPrefs: false);
+
+      // 4. Handler Siklus Pemutaran Audio
       _flutterTts.setStartHandler(() {
         _playbackState = TtsPlaybackState.playing;
         if (!_stateController.isClosed) _stateController.add(_playbackState);
@@ -111,12 +237,11 @@ class TtsService {
         }
       });
 
-      // 4. Handler Sinkronisasi Kata Real-Time (Read-Along)
+      // 5. Handler Sinkronisasi Kata Real-Time (Read-Along)
       _flutterTts.setProgressHandler((text, start, end, word) {
         _receivedNativeProgress = true;
         _stopFallbackTicker();
 
-        // Hitung perkiraan indeks kata ke-berapa dalam teks
         final snippetBefore = _currentText.substring(
           0,
           start.clamp(0, _currentText.length),
@@ -124,16 +249,53 @@ class TtsService {
         final wordIndex = RegExp(r'\S+').allMatches(snippetBefore).length;
 
         _lastPausedCharIndex = start;
-        _highlightController.add(TtsWordHighlight(
-          charStart: start,
-          charEnd: end,
-          word: word,
-          wordIndex: wordIndex,
-        ));
+        if (!_highlightController.isClosed) {
+          _highlightController.add(TtsWordHighlight(
+            charStart: start,
+            charEnd: end,
+            word: word,
+            wordIndex: wordIndex,
+          ));
+        }
       });
-    } catch (_) {
-      // Penanganan aman bila engine TTS belum terpasang di simulator
+    } catch (_) {}
+  }
+
+  /// Terapkan profil suara alami (Pitch, Speech Rate, Voice ID)
+  Future<void> applyVoiceProfile(String profileName, {bool saveToPrefs = true}) async {
+    final profile = _voiceProfiles.firstWhere(
+      (p) => p.name.toLowerCase() == profileName.toLowerCase() ||
+          p.id.toLowerCase() == profileName.toLowerCase(),
+      orElse: () => _voiceProfiles.first,
+    );
+
+    _selectedProfileName = profile.name;
+    _pitch = profile.pitch;
+    _speechRate = profile.speechRate;
+
+    try {
+      await _flutterTts.setPitch(_pitch);
+      await _flutterTts.setSpeechRate(_speechRate);
+
+      if (profile.nativeVoice != null) {
+        await _flutterTts.setVoice(profile.nativeVoice!);
+      }
+    } catch (_) {}
+
+    if (saveToPrefs) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_voicePrefKey, _selectedProfileName);
+      } catch (_) {}
     }
+  }
+
+  /// Putar sampel suara pendek untuk uji dengar di pengaturan
+  Future<void> testVoice(String profileName) async {
+    await applyVoiceProfile(profileName, saveToPrefs: false);
+    const sampleText =
+        'Halo, Cak Faruq. Ini adalah contoh suara pembacaan yang tenang dan ramah disleksia.';
+    await speak(sampleText);
   }
 
   /// Memulai atau melanjutkan pembacaan teks
@@ -155,14 +317,11 @@ class TtsService {
     try {
       await _flutterTts.speak(textToSpeak);
       _playbackState = TtsPlaybackState.playing;
-      _stateController.add(_playbackState);
-
-      // Jalankan fallback ticker jika platform tidak mengirimkan event native progress
+      if (!_stateController.isClosed) _stateController.add(_playbackState);
       _startFallbackTicker(textToSpeak, baseOffset: _lastPausedCharIndex);
     } catch (_) {
-      // Jalankan fallback simulasi pembacaan jika native engine offline
       _playbackState = TtsPlaybackState.playing;
-      _stateController.add(_playbackState);
+      if (!_stateController.isClosed) _stateController.add(_playbackState);
       _startFallbackTicker(textToSpeak, baseOffset: _lastPausedCharIndex);
     }
   }
@@ -205,21 +364,22 @@ class TtsService {
 
   /// Mengatur nada suara (pitch: 0.5 - 1.5)
   Future<void> setPitch(double pitch) async {
-    final clamped = pitch.clamp(0.5, 1.5);
+    _pitch = pitch.clamp(0.5, 1.5);
     try {
-      await _flutterTts.setPitch(clamped);
+      await _flutterTts.setPitch(_pitch);
     } catch (_) {}
   }
 
   /// Melompat mundur atau maju sejauh sejumlah karakter atau kata
   Future<void> jumpOffset(int charDelta) async {
     if (_currentText.isEmpty) return;
-    final newOffset = (_lastPausedCharIndex + charDelta).clamp(0, _currentText.length - 1);
+    final newOffset =
+        (_lastPausedCharIndex + charDelta).clamp(0, _currentText.length - 1);
     await stop();
     await speak(_currentText, fromCharIndex: newOffset);
   }
 
-  /// Fallback ticker sinkronisasi kata jika mesin TTS platform tidak memicu onProgress
+  /// Fallback ticker sinkronisasi kata jika mesin platform tidak memicu onProgress
   void _startFallbackTicker(String textChunk, {int baseOffset = 0}) {
     _stopFallbackTicker();
 
@@ -227,18 +387,17 @@ class TtsService {
     if (wordMatches.isEmpty) return;
 
     int currentMatchIndex = 0;
-
-    // Rerata durasi membaca satu kata berdasarkan speechRate (0.48x sekitar 320ms per kata)
     final intervalMs = (160 / _speechRate).round().clamp(150, 600);
 
-    // Beri jeda 350ms agar native handler punya kesempatan merespons lebih dulu
     Timer(const Duration(milliseconds: 350), () {
       if (_receivedNativeProgress || _playbackState != TtsPlaybackState.playing) {
         return;
       }
 
-      _fallbackTicker = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
-        if (_receivedNativeProgress || _playbackState != TtsPlaybackState.playing) {
+      _fallbackTicker =
+          Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
+        if (_receivedNativeProgress ||
+            _playbackState != TtsPlaybackState.playing) {
           timer.cancel();
           return;
         }
@@ -246,8 +405,12 @@ class TtsService {
         if (currentMatchIndex >= wordMatches.length) {
           timer.cancel();
           _playbackState = TtsPlaybackState.stopped;
-          _stateController.add(_playbackState);
-          _highlightController.add(TtsWordHighlight.empty);
+          if (!_stateController.isClosed) {
+            _stateController.add(_playbackState);
+          }
+          if (!_highlightController.isClosed) {
+            _highlightController.add(TtsWordHighlight.empty);
+          }
           return;
         }
 
@@ -256,12 +419,14 @@ class TtsService {
         final globalEnd = baseOffset + match.end;
 
         _lastPausedCharIndex = globalStart;
-        _highlightController.add(TtsWordHighlight(
-          charStart: globalStart,
-          charEnd: globalEnd,
-          word: match.group(0) ?? '',
-          wordIndex: currentMatchIndex,
-        ));
+        if (!_highlightController.isClosed) {
+          _highlightController.add(TtsWordHighlight(
+            charStart: globalStart,
+            charEnd: globalEnd,
+            word: match.group(0) ?? '',
+            wordIndex: currentMatchIndex,
+          ));
+        }
 
         currentMatchIndex++;
       });

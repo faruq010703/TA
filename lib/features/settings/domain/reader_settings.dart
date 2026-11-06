@@ -3,9 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Pilihan jenis font ramah disleksia
 enum ReaderFontFamily {
-  lexend('Lexend', 'Dirancang khusus mengurangi visual crowding'),
+  lexend('Lexend', 'Dirancang khusus mengurangi visual crowding (Rekomendasi)'),
   openDyslexic('OpenDyslexic', 'Bobot huruf lebih tebal di bagian bawah'),
-  sansSerif('Arial / Sans-Serif', 'Huruf netral standar tanpa serif');
+  sansSerif('Verdana / Sans-Serif', 'Huruf netral standar tanpa serif');
 
   final String displayName;
   final String description;
@@ -42,8 +42,8 @@ enum ReaderFontFamily {
         );
       case ReaderFontFamily.sansSerif:
         return TextStyle(
-          fontFamily: 'Arial',
-          fontFamilyFallback: const ['Roboto', 'Helvetica', 'sans-serif'],
+          fontFamily: 'Verdana',
+          fontFamilyFallback: const ['Arial', 'Roboto', 'sans-serif'],
           fontSize: fontSize,
           height: height,
           letterSpacing: letterSpacing,
@@ -58,40 +58,58 @@ enum ReaderFontFamily {
 /// Pilihan tema warna latar belakang & kontras ramah disleksia
 enum ReaderColorTheme {
   cream(
-    displayName: 'Krem Lembut',
-    backgroundColor: Color(0xFFF4EEDD), // #F4EEDD krem ramah Irlen Syndrome
+    displayName: 'Krem Hangat',
+    backgroundColor: Color(0xFFFBF8EE), // #FBF8EE krem hangat ramah Irlen Syndrome
     textColor: Color(0xFF1E242B),
-    shadingColor: Color(0xFFECE5D2),
+    shadingColor: Color(0xFFF3EEDC),
     surfaceColor: Color(0xFFFAF7EF),
     borderColor: Color(0xFFDFD7C4),
     isDark: false,
   ),
-  peach(
-    displayName: 'Peach Hangat',
-    backgroundColor: Color(0xFFFEEFE3), // #FEEFE3 peach lembut
-    textColor: Color(0xFF2E2620),
-    shadingColor: Color(0xFFF7DFD0),
-    surfaceColor: Color(0xFFFFF6F0),
-    borderColor: Color(0xFFE8D0BF),
+  lightGrey(
+    displayName: 'Abu Lembut',
+    backgroundColor: Color(0xFFEAECEE), // #EAECEE abu lembut
+    textColor: Color(0xFF1F242B),
+    shadingColor: Color(0xFFDFE2E5),
+    surfaceColor: Color(0xFFF4F6F7),
+    borderColor: Color(0xFFCBD0D4),
     isDark: false,
   ),
-  pastelBlue(
-    displayName: 'Pastel Blue',
-    backgroundColor: Color(0xFFE8F1F5), // #E8F1F5 biru pastel teduh
-    textColor: Color(0xFF1E252B),
-    shadingColor: Color(0xFFD6E4EB),
-    surfaceColor: Color(0xFFF2F7FA),
-    borderColor: Color(0xFFCADAE3),
+  mint(
+    displayName: 'Mint Sejuk',
+    backgroundColor: Color(0xFFE8F5E9), // #E8F5E9 mint sejuk
+    textColor: Color(0xFF1B2E1E),
+    shadingColor: Color(0xFFD7EBD9),
+    surfaceColor: Color(0xFFF1F9F2),
+    borderColor: Color(0xFFC3DFC6),
+    isDark: false,
+  ),
+  peach(
+    displayName: 'Peach Lembut',
+    backgroundColor: Color(0xFFFDEBD0), // #FDEBD0 peach hangat lembut
+    textColor: Color(0xFF2E241E),
+    shadingColor: Color(0xFFF7DEBE),
+    surfaceColor: Color(0xFFFFF4E5),
+    borderColor: Color(0xFFE6CDAC),
     isDark: false,
   ),
   lowContrastDark(
-    displayName: 'Dark Mode Lembut',
+    displayName: 'Mode Gelap Redup',
     backgroundColor: Color(0xFF1E1E1E), // #1E1E1E kontras rendah
     textColor: Color(0xFFD4D4D4), // #D4D4D4 teks lembut
     shadingColor: Color(0xFF282828),
     surfaceColor: Color(0xFF252525),
     borderColor: Color(0xFF383838),
     isDark: true,
+  ),
+  pastelBlue(
+    displayName: 'Biru Pastel',
+    backgroundColor: Color(0xFFEBF5FB),
+    textColor: Color(0xFF1A252F),
+    shadingColor: Color(0xFFD8EBF7),
+    surfaceColor: Color(0xFFF2F9FD),
+    borderColor: Color(0xFFBFDDF0),
+    isDark: false,
   ),
   pastelYellow(
     displayName: 'Kuning Pastel',
@@ -100,15 +118,6 @@ enum ReaderColorTheme {
     shadingColor: Color(0xFFF7EECD),
     surfaceColor: Color(0xFFFFFDF5),
     borderColor: Color(0xFFE8DCC2),
-    isDark: false,
-  ),
-  lightGrey(
-    displayName: 'Abu-abu Muda',
-    backgroundColor: Color(0xFFF1F3F5),
-    textColor: Color(0xFF1F242B),
-    shadingColor: Color(0xFFE5E9EC),
-    surfaceColor: Color(0xFFF8F9FA),
-    borderColor: Color(0xFFD6DBDF),
     isDark: false,
   );
 
@@ -145,6 +154,9 @@ class ReaderSettings {
   final int interWordPauseMs;
   final bool phonicSyllableColoring;
   final bool showReadingRuler;
+  final String voiceProfile;
+  final bool syncWordHighlight;
+  final bool autoSyllableSplit;
 
   const ReaderSettings({
     this.fontFamily = ReaderFontFamily.lexend,
@@ -154,11 +166,14 @@ class ReaderSettings {
     this.wordSpacing = 2.0,
     this.enableLineShading = true,
     this.colorTheme = ReaderColorTheme.cream,
-    this.speechRate = 0.8,
+    this.speechRate = 0.9,
     this.pitch = 1.0,
     this.interWordPauseMs = 200,
     this.phonicSyllableColoring = false,
     this.showReadingRuler = true,
+    this.voiceProfile = 'Bima - Pria Tenang',
+    this.syncWordHighlight = true,
+    this.autoSyllableSplit = true,
   });
 
   ReaderSettings copyWith({
@@ -174,6 +189,9 @@ class ReaderSettings {
     int? interWordPauseMs,
     bool? phonicSyllableColoring,
     bool? showReadingRuler,
+    String? voiceProfile,
+    bool? syncWordHighlight,
+    bool? autoSyllableSplit,
   }) {
     return ReaderSettings(
       fontFamily: fontFamily ?? this.fontFamily,
@@ -189,6 +207,9 @@ class ReaderSettings {
       phonicSyllableColoring:
           phonicSyllableColoring ?? this.phonicSyllableColoring,
       showReadingRuler: showReadingRuler ?? this.showReadingRuler,
+      voiceProfile: voiceProfile ?? this.voiceProfile,
+      syncWordHighlight: syncWordHighlight ?? this.syncWordHighlight,
+      autoSyllableSplit: autoSyllableSplit ?? this.autoSyllableSplit,
     );
   }
 
@@ -206,6 +227,9 @@ class ReaderSettings {
       'interWordPauseMs': interWordPauseMs,
       'phonicSyllableColoring': phonicSyllableColoring,
       'showReadingRuler': showReadingRuler,
+      'voiceProfile': voiceProfile,
+      'syncWordHighlight': syncWordHighlight,
+      'autoSyllableSplit': autoSyllableSplit,
     };
   }
 
@@ -224,11 +248,14 @@ class ReaderSettings {
         (e) => e.name == map['colorTheme'],
         orElse: () => ReaderColorTheme.cream,
       ),
-      speechRate: (map['speechRate'] as num?)?.toDouble() ?? 0.8,
+      speechRate: (map['speechRate'] as num?)?.toDouble() ?? 0.9,
       pitch: (map['pitch'] as num?)?.toDouble() ?? 1.0,
-      interWordPauseMs: (map['interWordPauseMs'] as num?)?.toInt() ?? 200,
+      interWordPauseMs: map['interWordPauseMs'] as int? ?? 200,
       phonicSyllableColoring: map['phonicSyllableColoring'] as bool? ?? false,
       showReadingRuler: map['showReadingRuler'] as bool? ?? true,
+      voiceProfile: map['voiceProfile'] as String? ?? 'Bima - Pria Tenang',
+      syncWordHighlight: map['syncWordHighlight'] as bool? ?? true,
+      autoSyllableSplit: map['autoSyllableSplit'] as bool? ?? true,
     );
   }
 }

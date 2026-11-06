@@ -80,8 +80,41 @@ class SettingsNotifier extends Notifier<ReaderSettings> {
     await _save();
   }
 
+  Future<void> updateVoiceProfile(String profile) async {
+    state = state.copyWith(voiceProfile: profile);
+    await _save();
+  }
+
+  Future<void> toggleSyncWordHighlight(bool enabled) async {
+    state = state.copyWith(syncWordHighlight: enabled);
+    await _save();
+  }
+
+  Future<void> toggleAutoSyllableSplit(bool enabled) async {
+    state = state.copyWith(autoSyllableSplit: enabled);
+    await _save();
+  }
+
   Future<void> resetToDefaults() async {
     state = const ReaderSettings();
+    await _save();
+  }
+
+  Future<void> resetToBdaDefaults() async {
+    state = const ReaderSettings(
+      fontFamily: ReaderFontFamily.lexend,
+      fontSize: 18.0,
+      lineSpacing: 1.8,
+      letterSpacing: 1.2,
+      wordSpacing: 2.0,
+      colorTheme: ReaderColorTheme.cream,
+      enableLineShading: true,
+      speechRate: 0.9,
+      pitch: 1.0,
+      voiceProfile: 'Bima - Pria Tenang',
+      syncWordHighlight: true,
+      autoSyllableSplit: true,
+    );
     await _save();
   }
 

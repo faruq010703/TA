@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lexiread/core/constants/app_strings.dart';
 import 'package:lexiread/features/ocr/data/ocr_service.dart';
 import 'package:lexiread/features/ocr/presentation/screens/ocr_preprocessing_screen.dart';
 import 'package:lexiread/features/ocr/presentation/screens/ocr_result_screen.dart';
@@ -120,7 +119,7 @@ void main() {
     ttsService.dispose();
   });
 
-  testWidgets('LexiRead smoke test - verify action cards render in HomeScreen',
+  testWidgets('BacaTenang HomeScreen render elements and Cak Faruq greeting',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'has_completed_onboarding': true});
     final prefs = await SharedPreferences.getInstance();
@@ -136,15 +135,19 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Pastikan 3 kartu aksi utama tampil di layar beranda
-    expect(find.text(AppStrings.actionCameraTitle), findsOneWidget);
-    expect(find.text(AppStrings.actionUploadTitle), findsOneWidget);
-    expect(find.text(AppStrings.actionPasteTitle), findsOneWidget);
+    // Pastikan sapaan khas Cak Faruq dan 3 kartu input utama tampil
+    expect(find.text('Halo, Cak Faruq 👋'), findsOneWidget);
+    expect(find.text('Pindai Kamera'), findsWidgets);
+    expect(find.text('Unggah Dokumen'), findsOneWidget);
+    expect(find.text('Tempel Teks'), findsOneWidget);
 
-    // Pastikan FAB kamera dan statistik membaca tampil
-    expect(find.text('Pindai Dokumen Baru'), findsOneWidget);
-    expect(find.text('Waktu Membaca'), findsOneWidget);
-    expect(find.text('Tuntas 100%'), findsOneWidget);
+    // Pastikan kartu Lanjutkan Membaca tampil setelah scroll
+    await tester.scrollUntilVisible(
+      find.text('Jurnal Psikologi Kognitif - Bab 3'),
+      300,
+    );
+    expect(find.text('Jurnal Psikologi Kognitif - Bab 3'), findsOneWidget);
+    expect(find.text('▶ Lanjut Baca'), findsOneWidget);
   });
 
   testWidgets('OnboardingScreen calibration controls and navigation flow',
@@ -288,8 +291,8 @@ void main() {
 
     expect(find.text('Dokumen Uji'), findsOneWidget);
 
-    // 1. Verifikasi tombol Ringkas dokumen tersedia
-    expect(find.text('Ringkas'), findsOneWidget);
+    // 1. Verifikasi tombol Ringkasan Cepat (AI) tersedia
+    expect(find.text('Ringkasan Cepat (AI)'), findsOneWidget);
 
     // 2. Verifikasi ketuk kata "mempertahankan" membuka SyllableDialog
     await tester.tap(find.text('mempertahankan'));
@@ -302,10 +305,9 @@ void main() {
     await tester.tap(find.byTooltip('Tutup'));
     await tester.pumpAndSettle();
 
-    // 3. Verifikasi tombol navigasi audio Bacakan dan kontrol tersedia
-    expect(find.text('Bacakan'), findsOneWidget);
-    expect(find.byTooltip('Hentikan Audio'), findsOneWidget);
-    expect(find.byTooltip('Mundur 10 Detik / Kalimat Sebelumnya'), findsOneWidget);
-    expect(find.byTooltip('Maju 10 Detik / Kalimat Berikutnya'), findsOneWidget);
+    // 3. Verifikasi kontrol audio navigasi
+    expect(find.byTooltip('Hentikan'), findsOneWidget);
+    expect(find.byTooltip('Mundur 5 Detik'), findsOneWidget);
+    expect(find.byTooltip('Maju 5 Detik'), findsOneWidget);
   });
 }
