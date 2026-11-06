@@ -33,7 +33,7 @@ class AdvancedAudioSheet extends ConsumerWidget {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final theme = settings.colorTheme;
-    final TtsService activeTts = ttsService ?? ref.read(ttsServiceProvider);
+    final TtsService? activeTts = ttsService ?? ref.read(ttsServiceProvider);
 
     return Container(
       constraints: BoxConstraints(
@@ -157,7 +157,7 @@ class AdvancedAudioSheet extends ConsumerWidget {
                 theme: theme,
                 onChanged: (val) {
                   controller.updateSpeechRate(val);
-                  activeTts.setSpeechRate(val);
+                  activeTts?.setSpeechRate(val);
                 },
               ),
 
@@ -172,7 +172,7 @@ class AdvancedAudioSheet extends ConsumerWidget {
                 theme: theme,
                 onChanged: (val) {
                   controller.updatePitch(val);
-                  activeTts.setPitch(val);
+                  activeTts?.setPitch(val);
                 },
               ),
 
@@ -195,7 +195,7 @@ class AdvancedAudioSheet extends ConsumerWidget {
               // Tombol Uji Suara Preview
               ElevatedButton.icon(
                 onPressed: () {
-                  activeTts.speak(
+                  activeTts?.speak(
                     'Halo. Ini adalah uji coba nada dan kecepatan suara membaca Anda.',
                   );
                 },
