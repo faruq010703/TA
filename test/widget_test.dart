@@ -147,7 +147,7 @@ void main() {
     expect(find.text('Tuntas 100%'), findsOneWidget);
   });
 
-  testWidgets('OnboardingScreen 3-step navigation flow',
+  testWidgets('OnboardingScreen calibration controls and navigation flow',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -165,26 +165,28 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Layar 1: Kalibrasi Tipografi
-    expect(find.text('LANGKAH 1 DARI 3: KALIBRASI TIPOGRAFI'), findsOneWidget);
+    // Verifikasi elemen visual kalibrasi kenyamanan membaca
+    expect(find.text('Kalibrasi Kenyamanan Membaca'), findsOneWidget);
+    expect(find.text('KARTU PRATINJAU TEKS'), findsOneWidget);
     expect(find.text('Ukuran Font'), findsOneWidget);
-    expect(find.text('Mulai Kalibrasi'), findsOneWidget);
+    expect(find.text('Palet Warna Latar Ramah Mata'), findsOneWidget);
+    expect(find.text('Krem'), findsOneWidget);
+    expect(find.text('Peach'), findsOneWidget);
+    expect(find.text('Biru Pastel'), findsOneWidget);
+    expect(find.text('Abu Lembut'), findsOneWidget);
 
-    // Pindah ke Layar 2
-    await tester.tap(find.text('Mulai Kalibrasi'));
+    // Verifikasi tombol 'Lewati' dan 'Mulai Membaca'
+    expect(find.byKey(const Key('skip_onboarding_button')), findsOneWidget);
+    expect(find.byKey(const Key('start_reading_button')), findsOneWidget);
+
+    // Uji interaksi pemilihan warna tema Peach
+    await tester.ensureVisible(find.text('Peach'));
+    await tester.tap(find.text('Peach'));
     await tester.pumpAndSettle();
 
-    // Layar 2: Dual-Coding Audio-Visual
-    expect(find.text('LANGKAH 2 DARI 3: DUAL-CODING AUDIO-VISUAL'), findsOneWidget);
-    expect(find.text('Lanjut ke Kamera'), findsOneWidget);
-
-    // Pindah ke Layar 3
-    await tester.tap(find.text('Lanjut ke Kamera'));
+    // Uji klik Mulai Membaca
+    await tester.tap(find.byKey(const Key('start_reading_button')));
     await tester.pumpAndSettle();
-
-    // Layar 3: Penyelarasan Kamera OCR
-    expect(find.text('LANGKAH 3 DARI 3: PRESISI PEMINDAIAN OCR'), findsOneWidget);
-    expect(find.text('Selesai & Mulai Membaca'), findsOneWidget);
   });
 
   testWidgets('OcrPreprocessingScreen UI controls render',

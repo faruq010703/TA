@@ -13,7 +13,9 @@ import '../../../settings/presentation/screens/settings_screen.dart';
 import '../../domain/models/reading_document.dart';
 import '../controllers/home_controller.dart';
 import '../widgets/action_card.dart';
+import '../widgets/advanced_audio_sheet.dart';
 import '../widgets/reading_history_card.dart';
+import '../widgets/typography_sheet.dart';
 import '../widgets/upload_source_dialog.dart';
 import 'manual_text_dialog.dart';
 import 'reader_screen.dart';
@@ -56,6 +58,170 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => const OnboardingScreen(),
+      ),
+    );
+  }
+
+  void _openTypographySheet(BuildContext context) {
+    TypographySheet.show(context);
+  }
+
+  void _openAudioSheet(BuildContext context) {
+    AdvancedAudioSheet.show(context);
+  }
+
+  void _showAccessibilityMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppDimens.radiusXL),
+          ),
+          border: Border.all(color: AppColors.border, width: 1.5),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.space20,
+          vertical: AppDimens.space16,
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppDimens.space16),
+              Text(
+                'Menu & Pengaturan Aksesibilitas',
+                style: AppTextStyles.headlineSmall.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: AppDimens.space12),
+
+              // 1. Modal Tipografi
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                  ),
+                  child: const Icon(Icons.text_fields_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  'Modal Tipografi & Teks',
+                  style: AppTextStyles.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  'Atur ukuran font, spasi baris, jarak huruf, dan tema warna.',
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openTypographySheet(context);
+                },
+              ),
+              const Divider(color: AppColors.border, height: 16),
+
+              // 2. Setelan Audio TTS
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.actionCameraBg,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                  ),
+                  child: const Icon(Icons.volume_up_rounded, color: AppColors.actionCameraIcon),
+                ),
+                title: Text(
+                  'Setelan Audio TTS',
+                  style: AppTextStyles.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  'Atur kecepatan suara, pitch vokal, dan durasi jeda kata.',
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openAudioSheet(context);
+                },
+              ),
+              const Divider(color: AppColors.border, height: 16),
+
+              // 3. Kalibrasi Ulang (Onboarding)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.actionUploadBg,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                  ),
+                  child: const Icon(Icons.auto_fix_high_rounded, color: AppColors.actionUploadIcon),
+                ),
+                title: Text(
+                  'Kalibrasi Kenyamanan Membaca',
+                  style: AppTextStyles.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  'Buka kembali panduan kalibrasi teks dan warna latar adaptif.',
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openOnboarding(context);
+                },
+              ),
+              const Divider(color: AppColors.border, height: 16),
+
+              // 4. Pengaturan Sistem Lengkap
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.actionPasteBg,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                  ),
+                  child: const Icon(Icons.settings_rounded, color: AppColors.actionPasteIcon),
+                ),
+                title: Text(
+                  'Semua Pengaturan Aplikasi',
+                  style: AppTextStyles.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  'Lihat dan kelola seluruh preferensi membaca LexiRead.',
+                  style: AppTextStyles.bodySmall,
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openSettings(context);
+                },
+              ),
+              const SizedBox(height: AppDimens.space8),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -187,43 +353,66 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                             Row(
                               children: [
-                                // Tombol Buka Alur Kalibrasi Tipografi (Onboarding)
+                                // 1. Tombol Buka Modal Tipografi
                                 IconButton(
                                   icon: const Icon(
-                                    Icons.auto_fix_high_rounded,
-                                    size: 22,
+                                    Icons.text_fields_rounded,
+                                    size: 20,
                                     color: AppColors.primary,
                                   ),
-                                  tooltip: 'Kalibrasi Aksesibilitas (Onboarding)',
+                                  tooltip: 'Modal Tipografi Adaptif',
                                   style: IconButton.styleFrom(
                                     backgroundColor: AppColors.primaryLight,
+                                    padding: const EdgeInsets.all(7),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(
                                         AppDimens.radiusM,
                                       ),
                                     ),
                                   ),
-                                  onPressed: () => _openOnboarding(context),
+                                  onPressed: () => _openTypographySheet(context),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
 
-                                // Tombol Pengaturan Aplikasi
+                                // 2. Tombol Buka Setelan Audio TTS
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.volume_up_rounded,
+                                    size: 20,
+                                    color: AppColors.primary,
+                                  ),
+                                  tooltip: 'Setelan Audio TTS',
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLight,
+                                    padding: const EdgeInsets.all(7),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusM,
+                                      ),
+                                    ),
+                                  ),
+                                  onPressed: () => _openAudioSheet(context),
+                                ),
+                                const SizedBox(width: 6),
+
+                                // 3. Tombol Menu Aksesibilitas & Pengaturan
                                 IconButton(
                                   icon: const Icon(
                                     Icons.tune_rounded,
-                                    size: 22,
+                                    size: 20,
                                     color: AppColors.primary,
                                   ),
-                                  tooltip: 'Pengaturan Aksesibilitas Baca',
+                                  tooltip: 'Menu & Pengaturan Aksesibilitas',
                                   style: IconButton.styleFrom(
                                     backgroundColor: AppColors.primaryLight,
+                                    padding: const EdgeInsets.all(7),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(
                                         AppDimens.radiusM,
                                       ),
                                     ),
                                   ),
-                                  onPressed: () => _openSettings(context),
+                                  onPressed: () => _showAccessibilityMenu(context),
                                 ),
                               ],
                             ),
@@ -552,6 +741,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   : 'Ubah filter atau tambahkan dokumen baru untuk melihat daftar bacaan.',
                               style: AppTextStyles.bodyMedium,
                               textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: AppDimens.space16),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final doc = await controller.addManualText(
+                                  'Mengenal Tipografi Nyaman Membaca',
+                                  'Membaca adalah jendela dunia yang terbuka lebar untuk siapa saja. '
+                                  'Bagi pembaca disleksia dewasa, kenyamanan visual seperti jarak baris yang cukup, '
+                                  'huruf yang tidak rapat, dan latar belakang krem lembut sangat membantu mata '
+                                  'fokus pada satu kata tanpa melompat-lompat antar baris. '
+                                  'LexiRead hadir mendampingi perjalanan baca Anda setiap saat.',
+                                );
+                                if (context.mounted) {
+                                  _openReader(context, doc);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(AppDimens.radiusM),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.menu_book_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Buka Bacaan Contoh Sekarang'),
                             ),
                           ],
                         ),

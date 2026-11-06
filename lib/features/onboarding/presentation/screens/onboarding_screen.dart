@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -8,10 +7,17 @@ import '../../../reader/presentation/screens/home_screen.dart';
 import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
 
-/// Alur Onboarding & Kalibrasi Aksesibilitas Disleksia Dewasa (3 Layar):
-/// 1. Kalibrasi Awal: Personalisasi ukuran font, letter spacing, line height, dan font family.
-/// 2. Dual-Coding Audio-Visual: Demonstrasi penyorotan teks real-time disinkronkan audio.
-/// 3. Penyelarasan Kamera OCR: Panduan frame kamera, grid dokumen, dan pencahayaan optimal.
+/// Layar Onboarding & Kalibrasi Aksesibilitas Disleksia Dewasa (LexiRead)
+///
+/// Fitur Utama:
+/// 1. Tombol 'Lewati' responsif langsung mengarahkan pengguna ke HomeScreen.
+/// 2. Body Scaffold visual lengkap:
+///    - Header judul & subtitle panduan "Kalibrasi Kenyamanan Membaca"
+///    - Kartu Pratinjau Teks (Preview Card) dengan latar krem lembut dinamis (#F4EEDD) & border
+///    - Slider pengatur ukuran font (14 - 28 sp) dengan pembaruan instan
+///    - Pemilih 4 palet warna latar (Krem, Peach, Biru Pastel, Abu Lembut)
+///    - Pemilih jenis huruf (Lexend, OpenDyslexic, Sans-Serif)
+///    - Tombol utama "Mulai Membaca" di bagian bawah menuju HomeScreen
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -20,112 +26,86 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  // Nilai pengaturan kalibrasi teks
+  double _fontSize = 18.0;
+  final double _lineHeight = 1.8;
+  final double _letterSpacing = 1.2;
+  ReaderFontFamily _selectedFont = ReaderFontFamily.lexend;
+  ReaderColorTheme _selectedTheme = ReaderColorTheme.cream;
 
-  // State kalibrasi lokal untuk Layar 1
-  double _sampleFontSize = 19.0;
-  double _sampleLetterSpacing = 1.2;
-  double _sampleLineHeight = 1.8;
-  ReaderFontFamily _sampleFont = ReaderFontFamily.lexend;
-
-  // State audio-visual demo untuk Layar 2
-  bool _isDemoPlaying = false;
-  int _highlightedWordIndex = -1;
-  Timer? _demoTimer;
-  double _demoRate = 0.8;
-
-  final List<String> _demoWords = [
-    'Membaca',
-    'kini',
-    'terasa',
-    'jauh',
-    'lebih',
-    'tenang,',
-    'fokus,',
-    'dan',
-    'menyenangkan',
-    'bersama',
-    'LexiRead.',
+  // 4 Palet warna latar ramah disleksia
+  final List<ReaderColorTheme> _palettes = [
+    ReaderColorTheme.cream,
+    ReaderColorTheme.peach,
+    ReaderColorTheme.pastelBlue,
+    ReaderColorTheme.lightGrey,
   ];
 
-  @override
-  void dispose() {
-    _demoTimer?.cancel();
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _nextPage() {
-    if (_currentPage < 2) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeInOutCubic,
-      );
-    } else {
-      _finishOnboarding();
+  String _getColorName(ReaderColorTheme theme) {
+    switch (theme) {
+      case ReaderColorTheme.cream:
+        return 'Krem';
+      case ReaderColorTheme.peach:
+        return 'Peach';
+      case ReaderColorTheme.pastelBlue:
+        return 'Biru Pastel';
+      case ReaderColorTheme.lightGrey:
+        return 'Abu Lembut';
+      default:
+        return theme.displayName;
     }
   }
 
-  Future<void> _finishOnboarding() async {
-    _demoTimer?.cancel();
-    // Simpan hasil kalibrasi ke settings global
-    final settingsNotifier = ref.read(settingsControllerProvider.notifier);
-    await settingsNotifier.updateFontSize(_sampleFontSize);
-    await settingsNotifier.updateLetterSpacing(_sampleLetterSpacing);
-    await settingsNotifier.updateLineSpacing(_sampleLineHeight);
-    await settingsNotifier.updateFontFamily(_sampleFont);
+  /// Navigasi langsung ketika tombol 'Lewati' ditekan
+  void _skipToHome() {
+    try {
+      ref
+          .read(sharedPreferencesProvider)
+          .setBool('has_completed_onboarding', true);
+    } catch (_) {}
 
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setBool('has_completed_onboarding', true);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+    );
+  }
+
+  /// Simpan pengaturan kalibrasi terpilih lalu arahkan ke HomeScreen
+  Future<void> _startReading() async {
+    try {
+      final settingsNotifier = ref.read(settingsControllerProvider.notifier);
+      await settingsNotifier.updateFontSize(_fontSize);
+      await settingsNotifier.updateColorTheme(_selectedTheme);
+      await settingsNotifier.updateFontFamily(_selectedFont);
+      await settingsNotifier.updateLineSpacing(_lineHeight);
+      await settingsNotifier.updateLetterSpacing(_letterSpacing);
+
+      final prefs = ref.read(sharedPreferencesProvider);
+      await prefs.setBool('has_completed_onboarding', true);
+    } catch (_) {}
 
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
     }
-  }
-
-  void _toggleDemoAudio() {
-    setState(() {
-      _isDemoPlaying = !_isDemoPlaying;
-    });
-
-    if (_isDemoPlaying) {
-      _startDemoLoop();
-    } else {
-      _demoTimer?.cancel();
-      setState(() {
-        _highlightedWordIndex = -1;
-      });
-    }
-  }
-
-  void _startDemoLoop() {
-    _demoTimer?.cancel();
-    final intervalMs = (420 / _demoRate).round();
-
-    _demoTimer = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
-      if (!mounted) return;
-      setState(() {
-        if (_highlightedWordIndex >= _demoWords.length - 1) {
-          _highlightedWordIndex = 0;
-        } else {
-          _highlightedWordIndex++;
-        }
-      });
-    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final previewTextStyle = _selectedFont.getTextStyle(
+      fontSize: _fontSize,
+      height: _lineHeight,
+      letterSpacing: _letterSpacing,
+      wordSpacing: 2.0,
+      color: _selectedTheme.textColor,
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4EEDD), // Latar krem lembut ramah disleksia
+      backgroundColor: const Color(0xFFF4EEDD),
       body: SafeArea(
         child: Column(
           children: [
-            // Header Top Bar: Logo Aplikasi, Badge Kalibrasi, dan Tombol Lewati
+            // Top Bar: Identitas LexiRead & Tombol 'Lewati'
             Container(
               margin: const EdgeInsets.symmetric(
                 horizontal: AppDimens.space16,
@@ -170,7 +150,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             ),
                           ),
                           Text(
-                            'Kalibrasi Aksesibilitas Disleksia',
+                            'Aksesibilitas Disleksia Dewasa',
                             style: AppTextStyles.bodySmall.copyWith(
                               fontSize: 11,
                               color: AppColors.textSecondary,
@@ -180,46 +160,509 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       ),
                     ],
                   ),
+
+                  // Tombol Lewati Responsif
                   TextButton.icon(
-                    onPressed: _finishOnboarding,
+                    key: const Key('skip_onboarding_button'),
+                    onPressed: _skipToHome,
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      foregroundColor: const Color(0xFF1E242B),
+                      backgroundColor: const Color(0xFFECE5D2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                        side: const BorderSide(
+                          color: Color(0xFFDFD7C4),
+                          width: 1.2,
+                        ),
+                      ),
                     ),
-                    icon: const Icon(Icons.skip_next_rounded, size: 18),
+                    icon: const Icon(
+                      Icons.skip_next_rounded,
+                      size: 19,
+                      color: AppColors.primary,
+                    ),
                     label: Text(
                       'Lewati',
-                      style: AppTextStyles.button.copyWith(fontSize: 13),
+                      style: AppTextStyles.button.copyWith(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1E242B),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Konten 3 Layar Onboarding (Scrollable dan Kaya Konten)
+            // Konten Utama Kalibrasi Kenyamanan Membaca (Scrollable & Penuh Visual)
             Expanded(
-              child: PageView(
-                controller: _pageController,
+              child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                onPageChanged: (page) {
-                  setState(() {
-                    _currentPage = page;
-                  });
-                  if (page != 1) {
-                    _demoTimer?.cancel();
-                    _isDemoPlaying = false;
-                    _highlightedWordIndex = -1;
-                  }
-                },
-                children: [
-                  _buildScreen1Calibration(),
-                  _buildScreen2DualCoding(),
-                  _buildScreen3CameraGuide(),
-                ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.space16,
+                  vertical: AppDimens.space8,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Badge Indikator Kalibrasi
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusS),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        'PANDUAN ADAPTIF DISLEKSIA',
+                        style: AppTextStyles.badge.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space8),
+
+                    // Judul & Subtitle
+                    Text(
+                      'Kalibrasi Kenyamanan Membaca',
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF1E242B),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space4),
+                    Text(
+                      'Atur ukuran teks dan palet latar belakang yang paling menenangkan untuk mata Anda guna mencegah kelelahan membaca dan efek visual crowding.',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: const Color(0xFF4A5568),
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space16),
+
+                    // KARTU PRATINJAU TEKS (PREVIEW CARD)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppDimens.space18),
+                      decoration: BoxDecoration(
+                        color: _selectedTheme.backgroundColor,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                        border: Border.all(
+                          color: _selectedTheme.borderColor,
+                          width: 1.8,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x12000000),
+                            blurRadius: 10,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.visibility_rounded,
+                                    size: 18,
+                                    color: _selectedTheme.textColor,
+                                  ),
+                                  const SizedBox(width: AppDimens.space6),
+                                  Text(
+                                    'KARTU PRATINJAU TEKS',
+                                    style: AppTextStyles.badge.copyWith(
+                                      color: _selectedTheme.textColor,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDimens.space10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _selectedTheme.surfaceColor,
+                                  borderRadius:
+                                      BorderRadius.circular(AppDimens.radiusS),
+                                  border: Border.all(
+                                    color: _selectedTheme.borderColor,
+                                  ),
+                                ),
+                                child: Text(
+                                  '${_fontSize.toStringAsFixed(0)} sp • ${_getColorName(_selectedTheme)}',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: _selectedTheme.textColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppDimens.space10),
+                          Divider(height: 1, color: _selectedTheme.borderColor),
+                          const SizedBox(height: AppDimens.space12),
+                          Text(
+                            'LexiRead dirancang khusus untuk kenyamanan membaca penderita disleksia dewasa. Tata letak dengan spasi lega, huruf berbobot bawah, dan kontras warna yang menenangkan membantu fokus membaca tanpa bayangan huruf yang saling bertumpuk.',
+                            style: previewTextStyle,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space16),
+
+                    // KONTROL 1: SLIDER PENGATUR UKURAN FONT (14 - 28 sp)
+                    Container(
+                      padding: const EdgeInsets.all(AppDimens.space16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF7EF),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                        border: Border.all(
+                          color: const Color(0xFFDFD7C4),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusS,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.format_size_rounded,
+                                      color: AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppDimens.space10),
+                                  Text(
+                                    'Ukuran Font',
+                                    style: AppTextStyles.titleMedium.copyWith(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF1E242B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimens.radiusM,
+                                  ),
+                                ),
+                                child: Text(
+                                  '${_fontSize.toStringAsFixed(0)} sp',
+                                  style: AppTextStyles.button.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppDimens.space8),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: AppColors.primary,
+                              inactiveTrackColor: const Color(0xFFDFD7C4),
+                              thumbColor: AppColors.primary,
+                              overlayColor:
+                                  AppColors.primary.withValues(alpha: 0.15),
+                              trackHeight: 4.0,
+                            ),
+                            child: Slider(
+                              value: _fontSize,
+                              min: 14.0,
+                              max: 28.0,
+                              divisions: 14,
+                              onChanged: (val) {
+                                setState(() {
+                                  _fontSize = val;
+                                });
+                              },
+                            ),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '14 sp (Kecil)',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                '28 sp (Besar)',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space14),
+
+                    // KONTROL 2: PILIHAN PALET WARNA LATAR (Krem, Peach, Biru Pastel, Abu Lembut)
+                    Container(
+                      padding: const EdgeInsets.all(AppDimens.space16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF7EF),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                        border: Border.all(
+                          color: const Color(0xFFDFD7C4),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryLight,
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimens.radiusS,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.palette_rounded,
+                                  color: AppColors.primary,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: AppDimens.space10),
+                              Text(
+                                'Palet Warna Latar Ramah Mata',
+                                style: AppTextStyles.titleMedium.copyWith(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1E242B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppDimens.space6),
+                          Text(
+                            'Pilih palet yang paling meredam silau dan pantulan kontras tajam:',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimens.space12),
+                          Row(
+                            children: _palettes.map((theme) {
+                              final isSelected = _selectedTheme == theme;
+                              final colorName = _getColorName(theme);
+
+                              return Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedTheme = theme;
+                                    });
+                                  },
+                                  child: Container(
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10,
+                                      horizontal: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.backgroundColor,
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimens.radiusM,
+                                      ),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.primary
+                                            : theme.borderColor,
+                                        width: isSelected ? 2.2 : 1.2,
+                                      ),
+                                      boxShadow: isSelected
+                                          ? [
+                                              BoxShadow(
+                                                color: AppColors.primary
+                                                    .withValues(alpha: 0.25),
+                                                blurRadius: 6,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          width: 22,
+                                          height: 22,
+                                          decoration: BoxDecoration(
+                                            color: theme.backgroundColor,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? AppColors.primary
+                                                  : const Color(0xFFC5BDB2),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: isSelected
+                                              ? const Icon(
+                                                  Icons.check_rounded,
+                                                  size: 14,
+                                                  color: AppColors.primary,
+                                                )
+                                              : null,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          colorName,
+                                          style:
+                                              AppTextStyles.bodySmall.copyWith(
+                                            fontSize: 11,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: const Color(0xFF1E242B),
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space14),
+
+                    // KONTROL 3: PILIHAN JENIS HURUF (FONT FAMILY)
+                    Container(
+                      padding: const EdgeInsets.all(AppDimens.space16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF7EF),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                        border: Border.all(
+                          color: const Color(0xFFDFD7C4),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryLight,
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimens.radiusS,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.font_download_rounded,
+                                  color: AppColors.primary,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: AppDimens.space10),
+                              Text(
+                                'Pilihan Jenis Huruf (Font)',
+                                style: AppTextStyles.titleMedium.copyWith(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1E242B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppDimens.space12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildFontChip(
+                                  font: ReaderFontFamily.lexend,
+                                  label: 'Lexend',
+                                  subtitle: 'Anti-crowding',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildFontChip(
+                                  font: ReaderFontFamily.openDyslexic,
+                                  label: 'OpenDyslexic',
+                                  subtitle: 'Bobot Bawah',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildFontChip(
+                                  font: ReaderFontFamily.sansSerif,
+                                  label: 'Sans-Serif',
+                                  subtitle: 'Standar Netral',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space16),
+                  ],
+                ),
               ),
             ),
 
-            // Bilah Navigasi Bawah: Indikator Titik Halaman & Tombol Aksi
+            // BILAH NAVIGASI BAWAH: TOMBOL "MULAI MEMBACA" MENUJU BERANDA
             Container(
               padding: const EdgeInsets.all(AppDimens.space16),
               decoration: const BoxDecoration(
@@ -228,62 +671,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   top: BorderSide(color: Color(0xFFDFD7C4), width: 1.5),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Page Indicator Dots
-                  Row(
-                    children: List.generate(3, (index) {
-                      final isActive = index == _currentPage;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        margin: const EdgeInsets.only(right: 6),
-                        width: isActive ? 26 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? AppColors.primary
-                              : const Color(0xFFC5BDB2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      );
-                    }),
+              child: ElevatedButton.icon(
+                key: const Key('start_reading_button'),
+                onPressed: _startReading,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(52),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppDimens.radiusL),
                   ),
-
-                  // Next / Start Button
-                  ElevatedButton.icon(
-                    onPressed: _nextPage,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppDimens.space20,
-                        vertical: AppDimens.space12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppDimens.radiusL),
-                      ),
-                      elevation: 1,
-                    ),
-                    icon: Icon(
-                      _currentPage == 2
-                          ? Icons.check_circle_rounded
-                          : Icons.arrow_forward_rounded,
-                      size: 20,
-                    ),
-                    label: Text(
-                      _currentPage == 0
-                          ? 'Mulai Kalibrasi'
-                          : _currentPage == 1
-                              ? 'Lanjut ke Kamera'
-                              : 'Selesai & Mulai Membaca',
-                      style: AppTextStyles.button.copyWith(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
-                    ),
+                ),
+                icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                label: Text(
+                  'Mulai Membaca',
+                  style: AppTextStyles.button.copyWith(
+                    color: Colors.white,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -292,818 +700,57 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  /// 1. Layar Kalibrasi Awal: Penggeser ukuran font, preview kartu teks, tombol Mulai Kalibrasi
-  Widget _buildScreen1Calibration() {
-    final previewTextStyle = _sampleFont.getTextStyle(
-      fontSize: _sampleFontSize,
-      height: _sampleLineHeight,
-      letterSpacing: _sampleLetterSpacing,
-      wordSpacing: 2.0,
-      color: const Color(0xFF1E242B),
-    );
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.space16,
-        vertical: AppDimens.space8,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(AppDimens.radiusS),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-            ),
-            child: Text(
-              'LANGKAH 1 DARI 3: KALIBRASI TIPOGRAFI',
-              style: AppTextStyles.badge.copyWith(
-                color: AppColors.primary,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space8),
-          Text(
-            'Sesuaikan Teks Sesuai Kenyamanan Mata Anda',
-            style: AppTextStyles.headlineMedium.copyWith(
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF1E242B),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space4),
-          Text(
-            'Huruf yang terlalu rapat atau kecil dapat memicu fenomena "huruf berkerumun" (visual crowding). Sesuaikan parameter berikut agar membaca lebih tenang:',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: const Color(0xFF4A5568),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // PREVIEW KARTU TEKS DINAMIS (Krem Hangat Kontras Tinggi)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppDimens.space16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFDF8),
-              borderRadius: BorderRadius.circular(AppDimens.radiusL),
-              border: Border.all(color: const Color(0xFFDFD7C4), width: 1.8),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.visibility_rounded,
-                          size: 16,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'PREVIEW TEKS DINAMIS',
-                          style: AppTextStyles.badge.copyWith(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF4EEDD),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${_sampleFontSize.toStringAsFixed(0)} pt | Spasi ${_sampleLineHeight.toStringAsFixed(1)}x',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: const Color(0xFF1E242B),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const Divider(height: 18, color: Color(0xFFDFD7C4)),
-                Text(
-                  'Setiap individu memproses teks dengan cara yang unik. '
-                  'Dengan jarak huruf dan baris yang tepat, kata-kata menjadi lebih mudah dikenali tanpa melelahkan mata.',
-                  style: previewTextStyle,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // SLIDER UKURAN FONT
-          _buildControlSlider(
-            label: 'Ukuran Font',
-            valueText: '${_sampleFontSize.toStringAsFixed(0)} pt',
-            value: _sampleFontSize,
-            min: 14.0,
-            max: 26.0,
-            icon: Icons.format_size_rounded,
-            onChanged: (val) {
-              setState(() {
-                _sampleFontSize = val;
-              });
-            },
-          ),
-
-          // SLIDER JARAK HURUF (LETTER SPACING)
-          _buildControlSlider(
-            label: 'Jarak Antar Huruf (Letter Spacing)',
-            valueText: '${_sampleLetterSpacing.toStringAsFixed(1)} px',
-            value: _sampleLetterSpacing,
-            min: 0.5,
-            max: 2.2,
-            icon: Icons.space_bar_rounded,
-            onChanged: (val) {
-              setState(() {
-                _sampleLetterSpacing = val;
-              });
-            },
-          ),
-
-          // SLIDER JARAK BARIS (LINE HEIGHT)
-          _buildControlSlider(
-            label: 'Tinggi Baris (Line Height)',
-            valueText: '${_sampleLineHeight.toStringAsFixed(1)}x',
-            value: _sampleLineHeight,
-            min: 1.4,
-            max: 2.4,
-            icon: Icons.format_line_spacing_rounded,
-            onChanged: (val) {
-              setState(() {
-                _sampleLineHeight = val;
-              });
-            },
-          ),
-
-          // PILIHAN FONT RAMAH DISLEKSIA
-          Text(
-            'Karakteristik Huruf:',
-            style: AppTextStyles.titleSmall.copyWith(
-              fontSize: 13,
-              color: const Color(0xFF1E242B),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space8),
-          Row(
-            children: [
-              _buildFontChip(ReaderFontFamily.lexend, 'Lexend (Standar)'),
-              const SizedBox(width: AppDimens.space8),
-              _buildFontChip(ReaderFontFamily.openDyslexic, 'OpenDyslexic (Weighted)'),
-            ],
-          ),
-          const SizedBox(height: AppDimens.space24),
-        ],
-      ),
-    );
-  }
-
-  /// 2. Layar Dual-Coding Audio-Visual: Kartu demo membaca dengan highlight teks real-time, tombol play/pause mengambang
-  Widget _buildScreen2DualCoding() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.space16,
-        vertical: AppDimens.space8,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.actionUploadBg,
-              borderRadius: BorderRadius.circular(AppDimens.radiusS),
-              border: Border.all(color: AppColors.actionUploadBorder),
-            ),
-            child: Text(
-              'LANGKAH 2 DARI 3: DUAL-CODING AUDIO-VISUAL',
-              style: AppTextStyles.badge.copyWith(
-                color: AppColors.actionUploadIcon,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space8),
-          Text(
-            'Membaca Lebih Cepat dengan Dua Jalur Indra',
-            style: AppTextStyles.headlineMedium.copyWith(
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF1E242B),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space4),
-          Text(
-            'Metode Dual-Coding menggabungkan narasi suara (audio) dengan penyorotan kata seketika (visual), membantu otak mengenali pola kata hingga 70% lebih lancar.',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: const Color(0xFF4A5568),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // KARTU DEMO MEMBACA DENGAN HIGHLIGHT KATA REAL-TIME
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppDimens.space16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFDF8),
-              borderRadius: BorderRadius.circular(AppDimens.radiusL),
-              border: Border.all(color: const Color(0xFFDFD7C4), width: 1.8),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          _isDemoPlaying
-                              ? Icons.volume_up_rounded
-                              : Icons.volume_mute_rounded,
-                          color: _isDemoPlaying
-                              ? AppColors.primary
-                              : AppColors.textMuted,
-                          size: 20,
-                        ),
-                        const SizedBox(width: AppDimens.space6),
-                        Text(
-                          _isDemoPlaying ? 'MEMBACAKAN AKTIF' : 'TEKAN PLAY UNTUK MEMULAI',
-                          style: AppTextStyles.badge.copyWith(
-                            color: _isDemoPlaying
-                                ? AppColors.primary
-                                : AppColors.textMuted,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      '${_demoRate.toStringAsFixed(1)}x kecepatan',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                const Divider(height: 18, color: Color(0xFFDFD7C4)),
-
-                // Area Teks Demo dengan Real-Time Highlight Word
-                Wrap(
-                  spacing: 7.0,
-                  runSpacing: 9.0,
-                  children: List.generate(_demoWords.length, (index) {
-                    final isHighlighted = index == _highlightedWordIndex;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isHighlighted
-                            ? AppColors.highlightWord
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(AppDimens.radiusS),
-                        border: Border.all(
-                          color: isHighlighted
-                              ? AppColors.highlightWordBorder
-                              : Colors.transparent,
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Text(
-                        _demoWords[index],
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          fontSize: 18,
-                          fontWeight: isHighlighted
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: isHighlighted
-                              ? AppColors.highlightWordText
-                              : const Color(0xFF1E242B),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-
-                const SizedBox(height: AppDimens.space18),
-
-                // TOMBOL PLAY/PAUSE MENGAMBANG & KONTROL KECEPATAN
-                Row(
-                  children: [
-                    // Floating Play/Pause Button
-                    ElevatedButton.icon(
-                      onPressed: _toggleDemoAudio,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isDemoPlaying
-                            ? AppColors.error
-                            : AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppDimens.space16,
-                          vertical: AppDimens.space12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppDimens.radiusM),
-                        ),
-                      ),
-                      icon: Icon(
-                        _isDemoPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        size: 22,
-                      ),
-                      label: Text(
-                        _isDemoPlaying ? 'Jeda Suara' : 'Mulai Demo',
-                        style: AppTextStyles.button.copyWith(color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: AppDimens.space12),
-
-                    // Slider Kecepatan Santai (0.5x - 1.5x)
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Kecepatan Suara:',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: AppColors.primary,
-                              thumbColor: AppColors.primary,
-                              trackHeight: 4,
-                            ),
-                            child: Slider(
-                              value: _demoRate,
-                              min: 0.5,
-                              max: 1.5,
-                              divisions: 10,
-                              onChanged: (val) {
-                                setState(() {
-                                  _demoRate = val;
-                                });
-                                if (_isDemoPlaying) {
-                                  _startDemoLoop();
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // Poin Manfaat Dual-Coding
-          Container(
-            padding: const EdgeInsets.all(AppDimens.space12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFAF7EF),
-              borderRadius: BorderRadius.circular(AppDimens.radiusM),
-              border: Border.all(color: const Color(0xFFDFD7C4)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.psychology_rounded,
-                  color: AppColors.primary,
-                  size: 26,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Dukungan audio-visual mengurangi beban memori kerja otak pembaca dewasa hingga 68%.',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: const Color(0xFF1E242B),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppDimens.space24),
-        ],
-      ),
-    );
-  }
-
-  /// 3. Layar Penyelarasan Kamera OCR: Viewfinder frame kamera dengan grid presisi & panduan pencahayaan
-  Widget _buildScreen3CameraGuide() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimens.space16,
-        vertical: AppDimens.space8,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.actionCameraBg,
-              borderRadius: BorderRadius.circular(AppDimens.radiusS),
-              border: Border.all(color: AppColors.actionCameraBorder),
-            ),
-            child: Text(
-              'LANGKAH 3 DARI 3: PRESISI PEMINDAIAN OCR',
-              style: AppTextStyles.badge.copyWith(
-                color: AppColors.actionCameraIcon,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space8),
-          Text(
-            'Panduan Penyelarasan Kamera Dokumen',
-            style: AppTextStyles.headlineMedium.copyWith(
-              fontSize: 21,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF1E242B),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space4),
-          Text(
-            'Ekstraksi teks lokal AI bekerja optimal saat kertas berada rata dan sejajar di dalam bingkai panduan kamera.',
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: const Color(0xFF4A5568),
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // VIEWFINDER FRAME KAMERA DENGAN GRID PRESISI DOKUMEN
-          Container(
-            height: 220,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E2228),
-              borderRadius: BorderRadius.circular(AppDimens.radiusL),
-              border: Border.all(color: const Color(0xFF384250), width: 2),
-            ),
-            child: Stack(
-              children: [
-                // Grid Garis Bantuan (Rule-of-Thirds Grid)
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
-                    Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    VerticalDivider(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      width: 1,
-                    ),
-                    VerticalDivider(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      width: 1,
-                    ),
-                  ],
-                ),
-
-                // Bingkai Garis Sudut Dokumen (Document Corner Alignment Brackets)
-                Positioned(
-                  top: 18,
-                  left: 18,
-                  child: _buildCornerBracket(isTop: true, isLeft: true),
-                ),
-                Positioned(
-                  top: 18,
-                  right: 18,
-                  child: _buildCornerBracket(isTop: true, isLeft: false),
-                ),
-                Positioned(
-                  bottom: 18,
-                  left: 18,
-                  child: _buildCornerBracket(isTop: false, isLeft: true),
-                ),
-                Positioned(
-                  bottom: 18,
-                  right: 18,
-                  child: _buildCornerBracket(isTop: false, isLeft: false),
-                ),
-
-                // Area Dokumen Simulasi di Tengah
-                Center(
-                  child: Container(
-                    width: 180,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppColors.actionCameraIcon.withValues(alpha: 0.8),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.document_scanner_rounded,
-                          color: Colors.white70,
-                          size: 32,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Posisikan Dokumen Di Sini',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Status Pencahayaan Tag
-                Positioned(
-                  bottom: 10,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.wb_sunny_rounded,
-                            color: Color(0xFFFBBF24),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Pencahayaan Terdeteksi Optimal',
-                            style: AppTextStyles.badge.copyWith(
-                              color: Colors.white,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppDimens.space16),
-
-          // PANDUAN PENCAHAYAAN & POSISI
-          _buildGuideItem(
-            icon: Icons.lightbulb_outline_rounded,
-            title: 'Pencahayaan Merata',
-            description:
-                'Gunakan cahaya alami atau lampu meja yang tidak menimbulkan bayangan tangan pada teks.',
-          ),
-          _buildGuideItem(
-            icon: Icons.crop_free_rounded,
-            title: 'Ratakan Permukaan Kertas',
-            description:
-                'Hindari lipatan tajam atau halaman melengkung agar karakter huruf terbaca jelas.',
-          ),
-          _buildGuideItem(
-            icon: Icons.stay_current_portrait_rounded,
-            title: 'Jarak Kamera 25-30 cm',
-            description:
-                'Posisikan gawai tegak lurus sejajar di atas kertas tanpa miring berlebih.',
-          ),
-          const SizedBox(height: AppDimens.space24),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlSlider({
+  Widget _buildFontChip({
+    required ReaderFontFamily font,
     required String label,
-    required String valueText,
-    required double value,
-    required double min,
-    required double max,
-    required IconData icon,
-    required ValueChanged<double> onChanged,
+    required String subtitle,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.space12),
-      padding: const EdgeInsets.all(AppDimens.space12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAF7EF),
-        borderRadius: BorderRadius.circular(AppDimens.radiusM),
-        border: Border.all(color: const Color(0xFFDFD7C4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 17, color: AppColors.primary),
-                  const SizedBox(width: AppDimens.space8),
-                  Text(
-                    label,
-                    style: AppTextStyles.titleSmall.copyWith(
-                      fontSize: 13,
-                      color: const Color(0xFF1E242B),
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(AppDimens.radiusS),
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-                ),
-                child: Text(
-                  valueText,
-                  style: AppTextStyles.badge.copyWith(
-                    color: AppColors.primary,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppColors.primary,
-              thumbColor: AppColors.primary,
-              inactiveTrackColor: const Color(0xFFC5BDB2).withValues(alpha: 0.4),
-              trackHeight: 4,
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              onChanged: onChanged,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    final isSelected = _selectedFont == font;
 
-  Widget _buildFontChip(ReaderFontFamily font, String label) {
-    final isSelected = _sampleFont == font;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _sampleFont = font;
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary : const Color(0xFFFAF7EF),
-            borderRadius: BorderRadius.circular(AppDimens.radiusM),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : const Color(0xFFDFD7C4),
-              width: 1.5,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: AppTextStyles.button.copyWith(
-              fontSize: 12,
-              color: isSelected ? Colors.white : const Color(0xFF1E242B),
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFont = font;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryLight : const Color(0xFFFAF7EF),
+          borderRadius: BorderRadius.circular(AppDimens.radiusM),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFDFD7C4),
+            width: isSelected ? 1.8 : 1.0,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCornerBracket({required bool isTop, required bool isLeft}) {
-    return Container(
-      width: 24,
-      height: 24,
-      decoration: BoxDecoration(
-        border: Border(
-          top: isTop
-              ? const BorderSide(color: Color(0xFFFBBF24), width: 3)
-              : BorderSide.none,
-          bottom: !isTop
-              ? const BorderSide(color: Color(0xFFFBBF24), width: 3)
-              : BorderSide.none,
-          left: isLeft
-              ? const BorderSide(color: Color(0xFFFBBF24), width: 3)
-              : BorderSide.none,
-          right: !isLeft
-              ? const BorderSide(color: Color(0xFFFBBF24), width: 3)
-              : BorderSide.none,
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: AppTextStyles.button.copyWith(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected ? AppColors.primary : const Color(0xFF1E242B),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: AppTextStyles.bodySmall.copyWith(
+                fontSize: 10,
+                color: isSelected
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildGuideItem({
-    required IconData icon,
-    required String title,
-    required String description,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppDimens.space10),
-      padding: const EdgeInsets.all(AppDimens.space12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAF7EF),
-        borderRadius: BorderRadius.circular(AppDimens.radiusM),
-        border: Border.all(color: const Color(0xFFDFD7C4)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(AppDimens.radiusS),
-            ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: AppDimens.space12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.titleSmall.copyWith(
-                    color: const Color(0xFF1E242B),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: const Color(0xFF4A5568),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
