@@ -219,7 +219,8 @@ class TtsService {
   int _scoreVoice(String name, String? networkQuality) {
     int score = 0;
     final lower = name.toLowerCase();
-    if (lower.contains('network') ||
+    if (lower.contains('natural') ||
+        lower.contains('network') ||
         lower.contains('wavenet') ||
         lower.contains('neural') ||
         (networkQuality != null && networkQuality.contains('high'))) {
@@ -228,8 +229,8 @@ class TtsService {
     if (lower.contains('dfz') || lower.contains('ide') || lower.contains('sul')) {
       score += 20; // Paket suara Google TTS id-ID standar berkualitas tinggi
     }
-    if (lower.contains('andika') || lower.contains('ardi') || lower.contains('gadis')) {
-      score += 30; // Paket suara Windows OneCore Bahasa Indonesia
+    if (lower.contains('ardi') || lower.contains('gadis') || lower.contains('andika')) {
+      score += 40; // Suara Microsoft Edge / Windows Natural Voice id-ID
     }
     return score;
   }
@@ -345,6 +346,41 @@ class TtsService {
               _voiceProfiles[2].copyWith(nativeVoice: larasNative),
               _voiceProfiles[3],
             ];
+
+            // Khusus Web / Microsoft Edge Natural Voices
+            if (kIsWeb) {
+              for (final item in rawVoices) {
+                if (item is Map) {
+                  final name = (item['name'] ?? '').toString();
+                  final locale = (item['locale'] ?? item['language'] ?? '').toString();
+                  final isId = locale.toLowerCase().contains('id') ||
+                      name.toLowerCase().contains('indonesia');
+
+                  if (isId) {
+                    // Pria: nama suara mengandung 'Ardi' atau 'Natural' dengan locale 'id-ID'
+                    if (name.contains('Ardi') ||
+                        (name.contains('Natural') && locale.contains('id-ID'))) {
+                      _voiceProfiles[0] = _voiceProfiles[0].copyWith(
+                        nativeVoice: {
+                          'name': name,
+                          'locale': locale.isNotEmpty ? locale : 'id-ID',
+                        },
+                      );
+                    }
+                    // Wanita (Dian & Laras): nama suara mengandung 'Gadis' atau 'Natural' dengan locale 'id-ID'
+                    if (name.contains('Gadis') ||
+                        (name.contains('Natural') && locale.contains('id-ID'))) {
+                      final femaleVoice = {
+                        'name': name,
+                        'locale': locale.isNotEmpty ? locale : 'id-ID',
+                      };
+                      _voiceProfiles[1] = _voiceProfiles[1].copyWith(nativeVoice: femaleVoice);
+                      _voiceProfiles[2] = _voiceProfiles[2].copyWith(nativeVoice: femaleVoice);
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       } catch (e) {
@@ -459,9 +495,7 @@ class TtsService {
       await _flutterTts.setPitch(_pitch);
       await _flutterTts.setSpeechRate(_speechRate);
 
-      if (profile.nativeVoice != null) {
-        await _flutterTts.setVoice(profile.nativeVoice!);
-      }
+      await _setNativeVoiceForProfile(profile);
     } catch (e) {
       debugPrint('applyVoiceProfile error: $e');
     }
@@ -478,6 +512,70 @@ class TtsService {
       final resumeIndex = _lastPausedCharIndex;
       await stop();
       await speak(_currentText, fromCharIndex: resumeIndex);
+    }
+  }
+
+  /// Memasang voice objek native dengan dukungan khusus Microsoft Edge Natural Voices pada Web
+  Future<void> _setNativeVoiceForProfile(TtsVoiceProfile profile) async {
+    try {
+      if (kIsWeb) {
+        final dynamic rawVoices = await _flutterTts.getVoices;
+        if (rawVoices is List) {
+          Map<String, String>? matchedVoice;
+          final isMale = profile.gender.toLowerCase() == 'pria';
+
+          for (final item in rawVoices) {
+            if (item is Map) {
+              final name = (item['name'] ?? '').toString();
+              final locale =
+                  (item['locale'] ?? item['language'] ?? '').toString();
+              final isId = locale.toLowerCase().contains('id') ||
+                  name.toLowerCase().contains('indonesia');
+
+              if (isId) {
+                if (isMale) {
+                  // Pria: nama suara mengandung 'Ardi' atau 'Natural' dengan locale 'id-ID'
+                  if (name.contains('Ardi') ||
+                      (name.contains('Natural') && locale.contains('id-ID'))) {
+                    matchedVoice = {
+                      'name': name,
+                      'locale': locale.isNotEmpty ? locale : 'id-ID',
+                    };
+                    break;
+                  }
+                } else {
+                  // Wanita (Dian & Laras): nama suara mengandung 'Gadis' atau 'Natural' dengan locale 'id-ID'
+                  if (name.contains('Gadis') ||
+                      (name.contains('Natural') && locale.contains('id-ID'))) {
+                    matchedVoice = {
+                      'name': name,
+                      'locale': locale.isNotEmpty ? locale : 'id-ID',
+                    };
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (matchedVoice != null) {
+            await _flutterTts.setVoice({
+              "name": matchedVoice['name'] ?? '',
+              "locale": matchedVoice['locale'] ?? 'id-ID',
+            });
+            return;
+          }
+        }
+      }
+
+      if (profile.nativeVoice != null) {
+        await _flutterTts.setVoice({
+          "name": profile.nativeVoice!['name'] ?? '',
+          "locale": profile.nativeVoice!['locale'] ?? 'id-ID',
+        });
+      }
+    } catch (e) {
+      debugPrint('setVoice notice: $e');
     }
   }
 
@@ -506,9 +604,7 @@ class TtsService {
       await _flutterTts.setPitch(targetPitch);
       await _flutterTts.setSpeechRate(targetRate);
 
-      if (profile.nativeVoice != null) {
-        await _flutterTts.setVoice(profile.nativeVoice!);
-      }
+      await _setNativeVoiceForProfile(profile);
     } catch (e) {
       debugPrint('Error applying sample voice: $e');
     }
