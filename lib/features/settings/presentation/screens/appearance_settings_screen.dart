@@ -106,7 +106,7 @@ class _AppearanceSettingsScreenState
       _letterSpacing = 1.2;
       _colorTheme = ReaderColorTheme.cream;
       _enableLineShading = true;
-      _voiceProfile = 'Bima - Pria Tenang';
+      _voiceProfile = 'Bima (Pria Tenang)';
       _speechRate = 0.9;
       _syncWordHighlight = true;
       _autoSyllableSplit = true;
@@ -574,21 +574,24 @@ class _AppearanceSettingsScreenState
 
                   // 3 Profil Alami: Bima, Dian, Laras
                   _buildVoiceTile(
-                    name: 'Bima - Pria Tenang',
-                    desc: 'Suara pria tenang, tempo santai',
+                    profileKey: 'bima',
+                    name: 'Bima (Pria Tenang)',
+                    desc: 'Pria Tenang & Berbobot',
                     icon: Icons.face_rounded,
                   ),
                   const SizedBox(height: 8),
                   _buildVoiceTile(
-                    name: 'Dian - Wanita Alami',
-                    desc: 'Suara wanita natural, artikulasi jernih',
+                    profileKey: 'dian',
+                    name: 'Dian (Wanita Tenang)',
+                    desc: 'Wanita Alami, Lembut & Tenang',
                     icon: Icons.face_3_rounded,
                   ),
                   const SizedBox(height: 8),
                   _buildVoiceTile(
-                    name: 'Laras - Cepat & Artikulatif',
-                    desc: 'Suara wanita cerah, tempo tangkas',
-                    icon: Icons.record_voice_over_rounded,
+                    profileKey: 'laras',
+                    name: 'Laras (Wanita Cepat/Jelas)',
+                    desc: 'Wanita Artikulasi Cepat & Tegas',
+                    icon: Icons.face_4_rounded,
                   ),
 
                   const SizedBox(height: AppDimens.space16),
@@ -798,67 +801,78 @@ class _AppearanceSettingsScreenState
     required String name,
     required String desc,
     required IconData icon,
+    String? profileKey,
   }) {
-    final isSelected = _voiceProfile.toLowerCase() == name.toLowerCase();
+    final pKey = profileKey ?? name.split(' ').first.toLowerCase();
+    final current = _voiceProfile.toLowerCase();
+    final isSelected = current == name.toLowerCase() ||
+        current == pKey ||
+        current.contains(pKey);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isSelected ? AppColors.primaryLight : const Color(0xFFFAF7EF),
-        borderRadius: BorderRadius.circular(AppDimens.radiusM),
-        border: Border.all(
-          color: isSelected ? AppColors.primary : const Color(0xFFDFD7C4),
-          width: isSelected ? 1.8 : 1.0,
+    return InkWell(
+      onTap: () {
+        setState(() => _voiceProfile = name);
+      },
+      borderRadius: BorderRadius.circular(AppDimens.radiusM),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryLight : const Color(0xFFFAF7EF),
+          borderRadius: BorderRadius.circular(AppDimens.radiusM),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFDFD7C4),
+            width: isSelected ? 1.8 : 1.0,
+          ),
         ),
-      ),
-      child: Row(
-        children: [
-          Radio<String>(
-            value: name,
-            groupValue: _voiceProfile,
-            activeColor: AppColors.primary,
-            onChanged: (val) {
-              if (val != null) setState(() => _voiceProfile = val);
-            },
-          ),
-          Icon(icon, size: 20, color: AppColors.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: AppTextStyles.titleSmall.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: const Color(0xFF1E242B),
-                  ),
-                ),
-                Text(
-                  desc,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+        child: Row(
+          children: [
+            Radio<String>(
+              value: name,
+              groupValue: isSelected ? name : '',
+              activeColor: AppColors.primary,
+              onChanged: (val) {
+                if (val != null) setState(() => _voiceProfile = val);
+              },
             ),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _testVoice(name),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              minimumSize: const Size(80, 32),
-              side: const BorderSide(color: AppColors.primary),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppDimens.radiusM),
+            Icon(icon, size: 24, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: AppTextStyles.titleSmall.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: const Color(0xFF1E242B),
+                    ),
+                  ),
+                  Text(
+                    desc,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
-            icon: const Icon(Icons.volume_up_rounded, size: 14),
-            label: const Text('Uji Dengar', style: TextStyle(fontSize: 11)),
-          ),
-        ],
+            OutlinedButton.icon(
+              onPressed: () => _testVoice(name),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                minimumSize: const Size(80, 32),
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                ),
+              ),
+              icon: const Icon(Icons.volume_up_rounded, size: 14),
+              label: const Text('Uji Dengar', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
       ),
     );
   }

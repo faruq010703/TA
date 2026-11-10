@@ -116,36 +116,29 @@ class TtsService {
 
   /// Daftar profil suara bawaan yang disesuaikan secara dinamis dengan platform OS
   List<TtsVoiceProfile> _getInitialVoiceProfiles() {
-    final isWindows = !kIsWeb && Platform.isWindows;
     return [
       TtsVoiceProfile(
         id: 'bima',
         name: 'Bima - Pria Tenang',
-        description: isWindows
-            ? 'Suara pria berbobot & tenang (Windows SAPI pitch 0.75, rate 0.45)'
-            : 'Suara pria tenang, vokal hangat, artikulasi berbobot',
-        pitch: isWindows ? 0.75 : 0.95,
-        speechRate: isWindows ? 0.45 : 0.88,
+        description: 'Pria Tenang & Berbobot',
+        pitch: getPlatformPitch('bima'),
+        speechRate: getPlatformSpeechRate('bima'),
         gender: 'Pria',
       ),
       TtsVoiceProfile(
         id: 'dian',
-        name: 'Dian - Wanita Alami',
-        description: isWindows
-            ? 'Suara wanita natural & ramah (Windows SAPI pitch 1.40, rate 0.50)'
-            : 'Suara wanita natural, artikulasi jernih dan ramah',
-        pitch: isWindows ? 1.40 : 1.05,
-        speechRate: isWindows ? 0.50 : 0.90,
+        name: 'Dian - Wanita Tenang',
+        description: 'Wanita Alami, Lembut & Tenang',
+        pitch: getPlatformPitch('dian'),
+        speechRate: getPlatformSpeechRate('dian'),
         gender: 'Wanita',
       ),
       TtsVoiceProfile(
         id: 'laras',
         name: 'Laras - Cepat & Artikulatif',
-        description: isWindows
-            ? 'Suara wanita nyaring & dinamis (Windows SAPI pitch 1.60, rate 0.60)'
-            : 'Suara wanita jelas, tempo dinamis, artikulasi fokus',
-        pitch: isWindows ? 1.60 : 1.15,
-        speechRate: isWindows ? 0.60 : 1.00,
+        description: 'Wanita Artikulasi Cepat & Tegas',
+        pitch: getPlatformPitch('laras'),
+        speechRate: getPlatformSpeechRate('laras'),
         gender: 'Wanita',
       ),
       TtsVoiceProfile(
@@ -153,64 +146,90 @@ class TtsService {
         name: 'Default Sistem',
         description: 'Profil netral engine bawaan gawai',
         pitch: 1.0,
-        speechRate: isWindows ? 0.50 : 0.95,
+        speechRate: getPlatformSpeechRate('system'),
         gender: 'Netral',
       ),
     ];
   }
 
-  /// Menentukan nilai pitch spesifik per platform (Windows SAPI vs Android/iOS)
+  /// Menentukan nilai pitch spesifik per platform (Windows SAPI vs Android/iOS/Web)
   double getPlatformPitch(String profileId) {
-    if (kIsWeb) return 1.0;
+    final id = profileId.toLowerCase();
+    if (kIsWeb) {
+      switch (id) {
+        case 'bima':
+          return 0.85; // Pitch tenang & berbobot
+        case 'dian':
+          return 1.00; // Nada stabil, tidak melengking, lembut & tenang
+        case 'laras':
+          return 1.15; // Lebih dinamis
+        default:
+          return 1.00;
+      }
+    }
     if (Platform.isWindows) {
-      switch (profileId.toLowerCase()) {
+      switch (id) {
         case 'bima':
           return 0.75; // Pitch rendah/berat khas pria di Windows SAPI
         case 'dian':
-          return 1.40; // Pitch tinggi khas wanita natural di Windows SAPI
+          return 1.00; // Pitch stabil dan tenang
         case 'laras':
-          return 1.60; // Pitch lebih tinggi dan nyaring di Windows SAPI
+          return 1.40; // Pitch cerah di Windows SAPI
         default:
-          return 1.0;
+          return 1.00;
       }
     } else {
-      switch (profileId.toLowerCase()) {
+      // Android / iOS
+      switch (id) {
         case 'bima':
-          return 0.95;
+          return 0.85; // Bima pria tenang
         case 'dian':
-          return 1.05;
+          return 1.00; // Dian nada stabil, tidak melengking, tenang & ramah
         case 'laras':
-          return 1.15;
+          return 1.15; // Laras dinamis
         default:
-          return 1.0;
+          return 1.00;
       }
     }
   }
 
-  /// Menentukan nilai speech rate spesifik per platform (Windows SAPI vs Android/iOS)
+  /// Menentukan nilai speech rate spesifik per platform (Windows SAPI vs Android/iOS/Web)
   double getPlatformSpeechRate(String profileId) {
-    if (kIsWeb) return 0.9;
-    if (Platform.isWindows) {
-      switch (profileId.toLowerCase()) {
+    final id = profileId.toLowerCase();
+    if (kIsWeb) {
+      switch (id) {
         case 'bima':
-          return 0.45; // Tempo santai & nyaman skala Windows
+          return 0.45; // Tempo santai skala web
         case 'dian':
-          return 0.50;
+          return 0.45; // Tempo santai, jeda jelas, artikulasi tenang
         case 'laras':
-          return 0.60; // Tempo lebih tangkas skala Windows
+          return 0.55; // Tempo lebih tangkas
         default:
-          return 0.50;
+          return 0.45;
+      }
+    }
+    if (Platform.isWindows) {
+      switch (id) {
+        case 'bima':
+          return 0.45; // Tempo santai skala Windows
+        case 'dian':
+          return 0.45; // Tempo tenang skala Windows
+        case 'laras':
+          return 0.55;
+        default:
+          return 0.45;
       }
     } else {
-      switch (profileId.toLowerCase()) {
+      // Android / iOS
+      switch (id) {
         case 'bima':
-          return 0.88;
+          return 0.85; // Bima tempo tenang
         case 'dian':
-          return 0.90;
+          return 0.82; // Dian tempo santai & jeda kata jelas
         case 'laras':
-          return 1.00;
+          return 1.00; // Laras tangkas & dinamis
         default:
-          return 0.95;
+          return 0.88;
       }
     }
   }
@@ -503,7 +522,8 @@ class TtsService {
     if (saveToPrefs) {
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_voicePrefKey, _selectedProfileName);
+        await prefs.setString(_voicePrefKey, profile.id);
+        await prefs.setString('${_voicePrefKey}_name', _selectedProfileName);
       } catch (_) {}
     }
 
@@ -516,14 +536,17 @@ class TtsService {
   }
 
   /// Memasang voice objek native dengan dukungan khusus Microsoft Edge Natural Voices pada Web
+  /// dan Google TTS Voice Pria/Wanita pada Android/Desktop
   Future<void> _setNativeVoiceForProfile(TtsVoiceProfile profile) async {
     try {
-      if (kIsWeb) {
-        final dynamic rawVoices = await _flutterTts.getVoices;
-        if (rawVoices is List) {
-          Map<String, String>? matchedVoice;
-          final isMale = profile.gender.toLowerCase() == 'pria';
+      final isMale = profile.gender.toLowerCase() == 'pria';
+      final dynamic rawVoices = await _flutterTts.getVoices;
 
+      if (rawVoices is List && rawVoices.isNotEmpty) {
+        Map<String, String>? matchedVoice;
+
+        if (kIsWeb) {
+          // Khusus Web / Microsoft Edge Natural Voices
           for (final item in rawVoices) {
             if (item is Map) {
               final name = (item['name'] ?? '').toString();
@@ -557,14 +580,56 @@ class TtsService {
               }
             }
           }
+        } else {
+          // Android / Desktop native
+          for (final item in rawVoices) {
+            if (item is Map) {
+              final name = (item['name'] ?? '').toString();
+              final locale =
+                  (item['locale'] ?? item['language'] ?? '').toString();
+              final gender = (item['gender'] ?? '').toString().toLowerCase();
+              final isId = locale.toLowerCase().contains('id') ||
+                  name.toLowerCase().contains('indonesia');
 
-          if (matchedVoice != null) {
-            await _flutterTts.setVoice({
-              "name": matchedVoice['name'] ?? '',
-              "locale": matchedVoice['locale'] ?? 'id-ID',
-            });
-            return;
+              if (isId) {
+                if (isMale) {
+                  if (gender == 'male' ||
+                      name.toLowerCase().contains('male') ||
+                      name.contains('Ardi') ||
+                      name.contains('Andika') ||
+                      name.contains('bima')) {
+                    matchedVoice = {
+                      'name': name,
+                      'locale': locale.isNotEmpty ? locale : 'id-ID',
+                    };
+                    break;
+                  }
+                } else {
+                  if (gender == 'female' ||
+                      name.toLowerCase().contains('female') ||
+                      name.contains('Gadis') ||
+                      name.contains('dfz#female') ||
+                      name.contains('ide#female') ||
+                      name.contains('dian') ||
+                      name.contains('laras')) {
+                    matchedVoice = {
+                      'name': name,
+                      'locale': locale.isNotEmpty ? locale : 'id-ID',
+                    };
+                    break;
+                  }
+                }
+              }
+            }
           }
+        }
+
+        if (matchedVoice != null) {
+          await _flutterTts.setVoice({
+            "name": matchedVoice['name'] ?? '',
+            "locale": matchedVoice['locale'] ?? 'id-ID',
+          });
+          return;
         }
       }
 
