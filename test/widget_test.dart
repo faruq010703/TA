@@ -122,6 +122,27 @@ void main() {
     ttsService.dispose();
   });
 
+  test('TtsService profil suara multiplatform (Bima, Dian, Laras) dan speakProfileSample', () async {
+    final tts = TtsService();
+    await tts.initialize();
+
+    // Verifikasi hirarki nada suara (pitch) karakter pria vs wanita
+    final bimaPitch = tts.getPlatformPitch('bima');
+    final dianPitch = tts.getPlatformPitch('dian');
+    final larasPitch = tts.getPlatformPitch('laras');
+
+    expect(bimaPitch < dianPitch, isTrue);
+    expect(dianPitch < larasPitch, isTrue);
+
+    // Verifikasi pengujian sampel suara profil
+    await tts.speakProfileSample('dian');
+    expect(tts.playbackState, TtsPlaybackState.playing);
+    expect(tts.selectedProfileName.toLowerCase().contains('dian'), isTrue);
+
+    await tts.stop();
+    tts.dispose();
+  });
+
   testWidgets('BacaTenang HomeScreen render elements and Cak Faruq greeting',
       (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'has_completed_onboarding': true});
