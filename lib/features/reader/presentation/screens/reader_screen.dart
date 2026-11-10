@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/theme/text_styles.dart';
+import '../../../../core/utils/accessibility_utils.dart';
 import '../../../settings/domain/reader_settings.dart';
 import '../../../settings/presentation/controllers/settings_controller.dart';
 import '../../../settings/presentation/screens/appearance_settings_screen.dart';
@@ -13,18 +14,38 @@ import '../controllers/home_controller.dart';
 import '../widgets/syllable_dialog.dart';
 import 'summary_screen.dart';
 
+/// Item kata individual untuk penyorotan kata real-time dan auto-scroll yang presisi
+class _WordItem {
+  final int index;
+  final String rawWord;
+  final String cleanWord;
+  final int charStart;
+  final int charEnd;
+  final GlobalKey key;
+
+  _WordItem({
+    required this.index,
+    required this.rawWord,
+    required this.cleanWord,
+    required this.charStart,
+    required this.charEnd,
+  }) : key = GlobalKey();
+}
+
 /// Struktur blok paragraf untuk pemetaan penyorotan kata dan auto-scrolling
 class _ParagraphBlock {
   final int index;
   final String text;
   final int globalCharStart;
   final int globalCharEnd;
+  final List<_WordItem> words;
 
   const _ParagraphBlock({
     required this.index,
     required this.text,
     required this.globalCharStart,
     required this.globalCharEnd,
+    required this.words,
   });
 }
 
@@ -34,9 +55,9 @@ class _ParagraphBlock {
 /// - Sub-header: Chip halaman ("Halaman 1 dari 4") & chip estimasi waktu baca
 /// - Tombol Pill: "💡 Buka Ringkasan Cepat (AI)"
 /// - Teks Bacaan: Font Lexend/OpenDyslexic, jarak baris 1.8x, penanda garis biru di kiri paragraf aktif
-/// - Fitur Read-Along: Highlight kata berwarna kuning pastel sinkron dengan kata TTS secara real-time
-/// - Interaksi Kata Sulit: Kata bergaris bawah putus-putus bisa diklik untuk memunculkan tooltip pemenggalan suku kata
-/// - Floating Audio Bar: Slider durasi (01:42 / 04:20), tombol -5s, Play/Pause bundar biru, +5s, dan tombol pengatur kecepatan (0.75x, 1.0x, 1.25x)
+/// - Fitur Read-Along: Highlight kata berwarna kuning pastel (#FFF59D / #FFE082) sinkron dengan suara TTS
+/// - Interaksi Kata Sulit: Kata bergaris bawah putus-putus bisa diklik untuk memunculkan modal pemenggalan suku kata
+/// - Floating Audio Bar: Slider durasi berjalan sinkron (01:42 / 04:20), tombol -5s, Play/Pause bundar biru, +5s, dan tombol pengatur kecepatan
 /// - Kartu "Catatan Pendukung (Dual-Coding)" di bawah teks
 class ReaderScreen extends ConsumerStatefulWidget {
   final ReadingDocument document;
@@ -83,23 +104,39 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     int currentOffset = 0;
     int paragraphIdx = 0;
+    int globalWordIdx = 0;
 
     for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isNotEmpty) {
         final startIndex = fullText.indexOf(trimmed, currentOffset);
-        final endIndex = startIndex >= 0
-            ? startIndex + trimmed.length
-            : currentOffset + trimmed.length;
-
         final actualStart = startIndex >= 0 ? startIndex : currentOffset;
-        final actualEnd = endIndex;
+        final actualEnd = actualStart + trimmed.length;
+
+        // Parse setiap kata dalam paragraf ini secara presisi
+        final wordList = <_WordItem>[];
+        final wordMatches = RegExp(r'\S+').allMatches(trimmed);
+        for (final match in wordMatches) {
+          final raw = match.group(0)!;
+          final clean = raw.replaceAll(RegExp(r'[^\w]'), '');
+          final wStart = actualStart + match.start;
+          final wEnd = actualStart + match.end;
+
+          wordList.add(_WordItem(
+            index: globalWordIdx++,
+            rawWord: raw,
+            cleanWord: clean,
+            charStart: wStart,
+            charEnd: wEnd,
+          ));
+        }
 
         final block = _ParagraphBlock(
           index: paragraphIdx,
           text: trimmed,
           globalCharStart: actualStart,
           globalCharEnd: actualEnd,
+          words: wordList,
         );
 
         blocks.add(block);
@@ -111,11 +148,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
 
     if (blocks.isEmpty) {
+      final wordList = <_WordItem>[];
+      final wordMatches = RegExp(r'\S+').allMatches(fullText);
+      for (final match in wordMatches) {
+        final raw = match.group(0)!;
+        final clean = raw.replaceAll(RegExp(r'[^\w]'), '');
+        wordList.add(_WordItem(
+          index: globalWordIdx++,
+          rawWord: raw,
+          cleanWord: clean,
+          charStart: match.start,
+          charEnd: match.end,
+        ));
+      }
+
       blocks.add(_ParagraphBlock(
         index: 0,
         text: fullText,
         globalCharStart: 0,
         globalCharEnd: fullText.length,
+        words: wordList,
       ));
       _paragraphKeys[0] = GlobalKey();
     }
@@ -184,25 +236,89 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  /// Memeriksa posisi kata yang sedang dibaca dan melakukan auto-scroll
+  /// jika posisi kata mendekati bagian bawah layar (di atas audio player)
   void _checkAutoScroll(TtsWordHighlight highlight) {
+    if (!_scrollController.hasClients) return;
+
+    _WordItem? activeWord;
+    int activeParagraphIndex = -1;
+
     for (final block in _paragraphs) {
-      if (highlight.charStart >= block.globalCharStart &&
-          highlight.charStart < block.globalCharEnd) {
-        if (_lastAutoScrolledParagraph != block.index) {
-          _lastAutoScrolledParagraph = block.index;
-          final key = _paragraphKeys[block.index];
-          if (key?.currentContext != null) {
-            Scrollable.ensureVisible(
-              key!.currentContext!,
-              alignment: 0.28,
-              duration: const Duration(milliseconds: 320),
-              curve: Curves.easeInOutCubic,
-            );
-          }
+      for (final word in block.words) {
+        if (_isWordItemHighlighted(word)) {
+          activeWord = word;
+          activeParagraphIndex = block.index;
+          break;
         }
-        break;
+      }
+      if (activeWord != null) break;
+    }
+
+    // Auto-scroll presisi berbasis kata
+    if (activeWord != null && activeWord.key.currentContext != null) {
+      final renderBox =
+          activeWord.key.currentContext!.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        final position = renderBox.localToGlobal(Offset.zero);
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        // Jika posisi kata mendekati batas bawah (di atas floating player ~200dp)
+        // atau tertinggal di atas viewport (< 110dp)
+        final bottomThreshold = screenHeight - 220;
+        const topThreshold = 110.0;
+
+        if (position.dy > bottomThreshold || position.dy < topThreshold) {
+          Scrollable.ensureVisible(
+            activeWord.key.currentContext!,
+            alignment: 0.30, // Menggeser kata aktif ke 30% dari bagian atas layar
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeInOutCubic,
+          );
+        }
+        return;
       }
     }
+
+    // Fallback auto-scroll berbasis paragraf jika context kata belum ter-mount
+    if (activeParagraphIndex >= 0 &&
+        _lastAutoScrolledParagraph != activeParagraphIndex) {
+      _lastAutoScrolledParagraph = activeParagraphIndex;
+      final key = _paragraphKeys[activeParagraphIndex];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          alignment: 0.28,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    }
+  }
+
+  bool _isWordItemHighlighted(_WordItem word) {
+    if (!_currentHighlight.isActive) return false;
+
+    // 1. Cek kecocokan berdasarkan rentang karakter global
+    if (_currentHighlight.charStart >= word.charStart &&
+        _currentHighlight.charStart < word.charEnd) {
+      return true;
+    }
+
+    // 2. Cek kecocokan indeks kata
+    if (_currentHighlight.wordIndex >= 0 &&
+        _currentHighlight.wordIndex == word.index) {
+      return true;
+    }
+
+    // 3. Fallback jika offset berada tepat di sekitar kata
+    if ((_currentHighlight.charStart - word.charStart).abs() <= 2 &&
+        word.cleanWord.isNotEmpty &&
+        _currentHighlight.word.toLowerCase() == word.cleanWord.toLowerCase()) {
+      return true;
+    }
+
+    return false;
   }
 
   @override
@@ -219,7 +335,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     await _ttsService.setSpeechRate(settings.speechRate);
     await _ttsService.setPitch(settings.pitch);
 
-    if (_ttsState == TtsPlaybackState.paused && _currentHighlight.charStart > 0) {
+    if (_ttsState == TtsPlaybackState.paused &&
+        _ttsService.lastPausedCharIndex > 0) {
+      await _ttsService.speak(
+        _currentDoc.content,
+        fromCharIndex: _ttsService.lastPausedCharIndex,
+      );
+    } else if (_currentHighlight.charStart > 0) {
       await _ttsService.speak(
         _currentDoc.content,
         fromCharIndex: _currentHighlight.charStart,
@@ -239,6 +361,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       _currentHighlight = TtsWordHighlight.empty;
       _lastAutoScrolledParagraph = -1;
     });
+  }
+
+  int _snapToWordBoundary(String text, int charIndex) {
+    if (charIndex <= 0) return 0;
+    if (charIndex >= text.length) return text.length;
+    final prevSpace = text.lastIndexOf(RegExp(r'\s'), charIndex);
+    if (prevSpace != -1) {
+      return (prevSpace + 1).clamp(0, text.length);
+    }
+    return charIndex;
   }
 
   void _openAppearanceSettings() {
@@ -296,13 +428,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final settings = ref.watch(settingsControllerProvider);
     final theme = settings.colorTheme;
 
-    // Hitung posisi durasi saat ini
-    final currentWords = _currentHighlight.wordIndex >= 0
-        ? _currentHighlight.wordIndex
-        : _currentDoc.currentWordIndex;
-    final totalWords = _currentDoc.totalWords > 0 ? _currentDoc.totalWords : 100;
-    final totalSeconds = (totalWords * 0.5).round();
-    final elapsedSeconds = (currentWords * 0.5).round().clamp(0, totalSeconds);
+    // Perhitungan durasi audio sinkron (01:42 / 04:20)
+    final totalWords = _currentDoc.totalWords > 0
+        ? _currentDoc.totalWords
+        : AccessibilityUtils.countWords(_currentDoc.content).clamp(1, 100000);
+    final totalSeconds = (totalWords * 0.45).round().clamp(10, 36000);
+
+    int currentWordIndex = 0;
+    if (_currentHighlight.isActive && _currentHighlight.wordIndex >= 0) {
+      currentWordIndex = _currentHighlight.wordIndex;
+    } else if (_ttsService.lastPausedCharIndex > 0 &&
+        _currentDoc.content.isNotEmpty) {
+      final ratio = _ttsService.lastPausedCharIndex / _currentDoc.content.length;
+      currentWordIndex = (ratio * totalWords).round();
+    } else {
+      currentWordIndex = _currentDoc.currentWordIndex;
+    }
+    currentWordIndex = currentWordIndex.clamp(0, totalWords);
+
+    final elapsedSeconds =
+        (currentWordIndex / totalWords * totalSeconds).round().clamp(0, totalSeconds);
 
     final elapsedMinStr = (elapsedSeconds ~/ 60).toString().padLeft(2, '0');
     final elapsedSecStr = (elapsedSeconds % 60).toString().padLeft(2, '0');
@@ -495,13 +640,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           width: isParagraphActive ? 3.5 : 1.0,
                         ),
                         top: BorderSide(
-                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                          color: isShaded
+                              ? theme.borderColor.withValues(alpha: 0.6)
+                              : Colors.transparent,
                         ),
                         right: BorderSide(
-                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                          color: isShaded
+                              ? theme.borderColor.withValues(alpha: 0.6)
+                              : Colors.transparent,
                         ),
                         bottom: BorderSide(
-                          color: isShaded ? theme.borderColor.withValues(alpha: 0.6) : Colors.transparent,
+                          color: isShaded
+                              ? theme.borderColor.withValues(alpha: 0.6)
+                              : Colors.transparent,
                         ),
                       ),
                     ),
@@ -637,9 +788,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 final charTarget = (charRatio *
                                         _currentDoc.content.length)
                                     .round();
+                                final snapped = _snapToWordBoundary(
+                                  _currentDoc.content,
+                                  charTarget,
+                                );
                                 _ttsService.speak(
                                   _currentDoc.content,
-                                  fromCharIndex: charTarget,
+                                  fromCharIndex: snapped,
                                 );
                               },
                             ),
@@ -726,7 +881,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           children: [
                             // Tombol -5 detik
                             IconButton(
-                              onPressed: () => _ttsService.jumpOffset(-30),
+                              onPressed: () => _ttsService.jumpOffset(-65),
                               icon: const Icon(Icons.replay_5_rounded, size: 28),
                               color: theme.textColor,
                               tooltip: 'Mundur 5 Detik',
@@ -735,9 +890,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
                             // Tombol Play / Pause Bundar Biru
                             GestureDetector(
-                              onTap: _ttsState != TtsPlaybackState.playing
-                                  ? _playTts
-                                  : _pauseTts,
+                              onTap: _ttsState == TtsPlaybackState.playing
+                                  ? _pauseTts
+                                  : _playTts,
                               child: Container(
                                 width: 52,
                                 height: 52,
@@ -765,7 +920,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
                             // Tombol +5 detik
                             IconButton(
-                              onPressed: () => _ttsService.jumpOffset(30),
+                              onPressed: () => _ttsService.jumpOffset(65),
                               icon: const Icon(Icons.forward_5_rounded, size: 28),
                               color: theme.textColor,
                               tooltip: 'Maju 5 Detik',
@@ -794,8 +949,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  /// Membangun teks paragraf dengan penyorotan kata Read-Along real-time
-  /// dan interaksi garis putus-putus pada kata majemuk / sulit
+  /// Membangun teks paragraf dengan custom wrap widget, penyorotan kata Read-Along real-time (#FFF59D / #FFE082),
+  /// serta interaksi garis bawah putus-putus pada kata majemuk / sulit
   Widget _buildParagraphText({
     required _ParagraphBlock block,
     required ReaderSettings settings,
@@ -810,62 +965,53 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       fontWeight: FontWeight.w400,
     );
 
-    final words = block.text.split(RegExp(r'\s+'));
-    int runningCharOffset = block.globalCharStart;
-
     return Wrap(
       spacing: 6.0,
-      runSpacing: 5.0,
-      children: words.map((rawWord) {
-        final cleanWord = rawWord.replaceAll(RegExp(r'[^\w]'), '');
-        final wordStart = block.text.indexOf(
-                rawWord, runningCharOffset - block.globalCharStart) +
-            block.globalCharStart;
-        final wordEnd = wordStart + rawWord.length;
-        runningCharOffset = wordEnd;
-
-        // Cek penyorotan kata aktif TTS (Read-Along)
-        final isHighlighted = settings.syncWordHighlight &&
-            _currentHighlight.isActive &&
-            ((_currentHighlight.charStart >= wordStart &&
-                    _currentHighlight.charStart < wordEnd) ||
-                (_currentHighlight.word.toLowerCase() ==
-                        cleanWord.toLowerCase() &&
-                    cleanWord.isNotEmpty &&
-                    _currentHighlight.charStart >= block.globalCharStart &&
-                    _currentHighlight.charStart < block.globalCharEnd));
-
+      runSpacing: 6.0,
+      children: block.words.map((word) {
+        final isHighlighted =
+            settings.syncWordHighlight && _isWordItemHighlighted(word);
         final isDifficult =
-            settings.autoSyllableSplit && _isDifficultWord(cleanWord);
+            settings.autoSyllableSplit && _isDifficultWord(word.cleanWord);
 
         return GestureDetector(
+          key: word.key,
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            if (cleanWord.isNotEmpty) {
+            if (word.cleanWord.isNotEmpty) {
               SyllableDialog.show(
                 context,
-                word: cleanWord,
+                word: word.cleanWord,
                 ttsService: _ttsService,
               );
             }
           },
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
             padding: EdgeInsets.symmetric(
-              horizontal: isHighlighted ? 5.0 : 1.0,
-              vertical: isHighlighted ? 2.0 : 0.0,
+              horizontal: isHighlighted ? 6.0 : 2.0,
+              vertical: isHighlighted ? 3.0 : 1.0,
             ),
             decoration: isHighlighted
                 ? BoxDecoration(
-                    color: AppColors.highlightWord, // Kuning pastel #FFF3A8
-                    borderRadius: BorderRadius.circular(4),
+                    color: AppColors.highlightWord, // Kuning pastel lembut (#FFF59D)
+                    borderRadius: BorderRadius.circular(6.0),
                     border: Border.all(
-                      color: AppColors.highlightWordBorder,
-                      width: 1.2,
+                      color: AppColors.highlightWordBorder, // Border kuning (#FFE082)
+                      width: 1.5,
                     ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x33FBC02D),
+                        blurRadius: 4.0,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
                   )
                 : null,
             child: Text(
-              rawWord,
+              word.rawWord,
               style: isHighlighted
                   ? baseStyle.copyWith(
                       color: AppColors.highlightWordText,
